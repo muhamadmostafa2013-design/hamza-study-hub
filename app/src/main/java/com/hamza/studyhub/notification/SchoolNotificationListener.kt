@@ -4,6 +4,8 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.hamza.studyhub.homework.HomeworkInterpreter
+import com.hamza.studyhub.homework.UpdateType
 import org.json.JSONObject
 import java.io.File
 
@@ -46,6 +48,14 @@ class SchoolNotificationListener : NotificationListenerService() {
             if (summaryText.isNotBlank()) add(summaryText)
         }.joinToString("\n").trim()
 
+        val interpretation = HomeworkInterpreter.interpret(title, fullText)
+        val needsAttention = interpretation.type == UpdateType.HOMEWORK && interpretation.needsFullText
+        val attentionReason = if (needsAttention) {
+            "الإشعار يقول إن فيه واجب، لكن تفاصيل المطلوب غير كاملة. افتح الواجب مرة واحدة لو Teams لم يرسل النص كاملًا."
+        } else {
+            ""
+        }
+
         val item = JSONObject().apply {
             put("source", source)
             put("packageName", sbn.packageName)
@@ -55,6 +65,10 @@ class SchoolNotificationListener : NotificationListenerService() {
             put("timestamp", sbn.postTime)
             put("isNew", true)
             put("notificationKey", sbn.key)
+            put("updateType", interpretation.type.name)
+            put("needsAttention", needsAttention)
+            put("attentionReason", attentionReason)
+            put("attentionResolved", false)
         }
 
         if (isRecentDuplicate(item)) {
