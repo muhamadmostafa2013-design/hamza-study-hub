@@ -24,5 +24,4 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
-    implementation("com.github.Keule0010:WebUntisAPI:a93bf6407440cc9ec38d5b31cb797f1865165a8a")
 }
