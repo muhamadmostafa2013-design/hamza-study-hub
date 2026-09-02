@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.hamza.studyhub.agents.AgentOrchestrator
 import com.hamza.studyhub.monitor.BackgroundAlert
 import org.json.JSONObject
 import java.io.File
@@ -135,9 +136,8 @@ class WebUntisSyncWorker(
             val needsAttention = attentionReason.isNotBlank()
             val previousResolved = previous?.optBoolean("attentionResolved", false) ?: false
             val attentionResolved = if (isChanged) false else previousResolved
-            if (needsAttention && !attentionResolved) attentionCount++
 
-            val item = JSONObject().apply {
+            val rawItem = JSONObject().apply {
                 put("source", "Untis")
                 put("packageName", "com.grupet.web.app")
                 put("title", "Hausaufgabe • $subject")
@@ -165,6 +165,9 @@ class WebUntisSyncWorker(
                 put("attentionReason", attentionReason)
                 put("attentionResolved", attentionResolved)
             }
+
+            val item = AgentOrchestrator.enrich(rawItem)
+            if (item.optBoolean("needsAttention", false) && !attentionResolved) attentionCount++
 
             if (previousIndex == null) {
                 existing.add(item)
