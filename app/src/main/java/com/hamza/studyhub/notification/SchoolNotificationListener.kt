@@ -4,8 +4,7 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import com.hamza.studyhub.homework.HomeworkInterpreter
-import com.hamza.studyhub.homework.UpdateType
+import com.hamza.studyhub.agents.AgentOrchestrator
 import org.json.JSONObject
 import java.io.File
 
@@ -48,15 +47,7 @@ class SchoolNotificationListener : NotificationListenerService() {
             if (summaryText.isNotBlank()) add(summaryText)
         }.joinToString("\n").trim()
 
-        val interpretation = HomeworkInterpreter.interpret(title, fullText)
-        val needsAttention = interpretation.type == UpdateType.HOMEWORK && interpretation.needsFullText
-        val attentionReason = if (needsAttention) {
-            "الإشعار يقول إن فيه واجب، لكن تفاصيل المطلوب غير كاملة. افتح الواجب مرة واحدة لو Teams لم يرسل النص كاملًا."
-        } else {
-            ""
-        }
-
-        val item = JSONObject().apply {
+        val rawItem = JSONObject().apply {
             put("source", source)
             put("packageName", sbn.packageName)
             put("title", title)
@@ -65,11 +56,10 @@ class SchoolNotificationListener : NotificationListenerService() {
             put("timestamp", sbn.postTime)
             put("isNew", true)
             put("notificationKey", sbn.key)
-            put("updateType", interpretation.type.name)
-            put("needsAttention", needsAttention)
-            put("attentionReason", attentionReason)
             put("attentionResolved", false)
         }
+
+        val item = AgentOrchestrator.enrich(rawItem)
 
         if (isRecentDuplicate(item)) {
             Log.d(TAG, "Ignored duplicate $source notification: $title")
@@ -77,7 +67,7 @@ class SchoolNotificationListener : NotificationListenerService() {
         }
 
         appendNotification(item)
-        Log.d(TAG, "Captured $source notification: $title")
+        Log.d(TAG, "Captured and agent-processed $source notification: $title")
     }
 
     private fun isRecentDuplicate(candidate: JSONObject): Boolean {
