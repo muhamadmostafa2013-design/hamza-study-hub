@@ -57,8 +57,9 @@ private object IntakeAgent : StudyAgent {
     override fun process(context: AgentContext) {
         val raw = context.raw
         val source = context.source().lowercase()
+        val importMethod = raw.optString("importMethod")
         val trust = when {
-            raw.optString("importMethod").equals("WebUntis Sync", true) -> "OFFICIAL"
+            importMethod.contains("WebUntis", true) -> "OFFICIAL"
             source == "untis" || source == "teams" -> "OFFICIAL_SIGNAL"
             source == "whatsapp" -> "COMMUNITY"
             raw.optBoolean("imported", false) -> "USER_IMPORTED"
@@ -66,7 +67,7 @@ private object IntakeAgent : StudyAgent {
         }
 
         raw.put("evidenceTrust", trust)
-        raw.put("canonicalSource", canonicalSource(source, raw.optString("importMethod")))
+        raw.put("canonicalSource", canonicalSource(source, importMethod))
         raw.put("contentFingerprint", fingerprint(listOf(context.source(), context.title(), context.body()).joinToString("|")))
 
         if (!raw.has("needsAttention")) raw.put("needsAttention", false)
@@ -74,7 +75,7 @@ private object IntakeAgent : StudyAgent {
     }
 
     private fun canonicalSource(source: String, method: String): String = when {
-        method.equals("WebUntis Sync", true) -> "WEBUNTIS"
+        method.contains("WebUntis", true) -> "WEBUNTIS"
         source == "untis" -> "UNTIS_NOTIFICATION"
         source == "teams" -> "TEAMS_NOTIFICATION"
         source == "whatsapp" -> "WHATSAPP_PARENT"
