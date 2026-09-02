@@ -10,9 +10,12 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.hamza.studyhub.monitor.BackgroundAlert
 import org.json.JSONObject
 import java.io.File
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 class WebUntisSyncWorker(
@@ -30,8 +33,23 @@ class WebUntisSyncWorker(
                 end = today.plusDays(45)
             )
 
-            mergeIntoFeed(homeworks)
+            val summary = mergeIntoFeed(homeworks, today)
             WebUntisConfigStore.saveSyncSuccess(applicationContext)
+
+            if (summary.newCount > 0 || summary.updatedCount > 0) {
+                val parts = buildList {
+                    if (summary.newCount > 0) add("${summary.newCount} واجب جديد")
+                    if (summary.updatedCount > 0) add("${summary.updatedCount} تعديل")
+                    if (summary.attentionCount > 0) add("${summary.attentionCount} يحتاج انتباه")
+                }
+                BackgroundAlert.notify(
+                    applicationContext,
+                    "Hamza Study Hub • تحديث من Untis",
+                    parts.joinToString(" • "),
+                    4101
+                )
+            }
+
             Result.success()
         } catch (e: Exception) {
             WebUntisConfigStore.saveSyncError(
@@ -42,7 +60,13 @@ class WebUntisSyncWorker(
         }
     }
 
-    private fun mergeIntoFeed(homeworks: List<WebUntisClient.Homework>) {
+    private data class SyncSummary(
+        val newCount: Int,
+        val updatedCount: Int,
+        val attentionCount: Int
+    )
+
+    private fun mergeIntoFeed(homeworks: List<WebUntisClient.Homework>, today: LocalDate): SyncSummary {
         val file = File(applicationContext.filesDir, "school_notifications.jsonl")
         val existing = if (file.exists()) {
             file.readLines().mapNotNull { line ->
@@ -59,6 +83,10 @@ class WebUntisSyncWorker(
             .toMap()
             .toMutableMap()
 
+        var newCount = 0
+        var updatedCount = 0
+        var attentionCount = 0
+
         homeworks.forEach { hw ->
             val externalId = "untis-homework-${hw.id}"
             val subject = hw.subject.ifBlank { "Untis" }
@@ -68,7 +96,7 @@ class WebUntisSyncWorker(
                     if (isNotEmpty()) append("\n")
                     append(hw.remark)
                 }
-            }.ifBlank { "واجب بدون وصف نصي في WebUntis" }
+            }.ifBlank { "واجب موجود في WebUntis بدون وصف نصي" }
 
             val previousIndex = byExternalId[externalId]
             val previous = previousIndex?.let { existing.getOrNull(it) }
@@ -83,16 +111,46 @@ class WebUntisSyncWorker(
             ).joinToString("|")
 
             val isChanged = previous == null || previousSignature != signature
+            val syncChange = when {
+                previous == null -> "new"
+                isChanged -> "updated"
+                else -> "unchanged"
+            }
+
+            if (syncChange == "new") newCount++
+            if (syncChange == "updated") updatedCount++
+
+            val dueDate = parseUntisDate(hw.dueDate)
+            val daysUntilDue = dueDate?.let { ChronoUnit.DAYS.between(today, it) }
+            val missingDetails = hw.text.isBlank() && hw.remark.isBlank()
+            val attentionReason = when {
+                hw.completed -> ""
+                missingDetails -> "تفاصيل الواجب غير موجودة في WebUntis؛ افتح المصدر لو احتجنا المطلوب كاملًا."
+                daysUntilDue != null && daysUntilDue < 0 -> "الواجب متأخر عن موعد التسليم."
+                daysUntilDue != null && daysUntilDue <= 1 -> "موعد التسليم قريب جدًا."
+                syncChange == "new" -> "واجب جديد تم اكتشافه تلقائيًا من WebUntis."
+                syncChange == "updated" -> "تم تعديل هذا الواجب على WebUntis."
+                else -> ""
+            }
+            val needsAttention = attentionReason.isNotBlank()
+            val previousResolved = previous?.optBoolean("attentionResolved", false) ?: false
+            val attentionResolved = if (isChanged) false else previousResolved
+            if (needsAttention && !attentionResolved) attentionCount++
+
             val item = JSONObject().apply {
                 put("source", "Untis")
                 put("packageName", "com.grupet.web.app")
                 put("title", "Hausaufgabe • $subject")
                 put("text", combinedText)
                 put("bigText", combinedText)
-                put("timestamp", if (isChanged) System.currentTimeMillis() else previous?.optLong("timestamp") ?: System.currentTimeMillis())
+                put(
+                    "timestamp",
+                    if (isChanged) System.currentTimeMillis()
+                    else previous?.optLong("timestamp") ?: System.currentTimeMillis()
+                )
                 put("isNew", if (isChanged) true else previous?.optBoolean("isNew", false) ?: false)
                 put("imported", true)
-                put("importMethod", "WebUntis Sync")
+                put("importMethod", "WebUntis Auto Sync")
                 put("externalId", externalId)
                 put("homeworkId", hw.id)
                 put("lessonId", hw.lessonId)
@@ -102,7 +160,10 @@ class WebUntisSyncWorker(
                 put("subject", subject)
                 put("teacher", hw.teacher)
                 put("syncSignature", signature)
-                put("syncChange", if (previous == null) "new" else if (isChanged) "updated" else "unchanged")
+                put("syncChange", syncChange)
+                put("needsAttention", needsAttention)
+                put("attentionReason", attentionReason)
+                put("attentionResolved", attentionResolved)
             }
 
             if (previousIndex == null) {
@@ -116,6 +177,15 @@ class WebUntisSyncWorker(
         file.writeText(
             existing.joinToString("\n") { it.toString() } + if (existing.isNotEmpty()) "\n" else ""
         )
+
+        return SyncSummary(newCount, updatedCount, attentionCount)
+    }
+
+    private fun parseUntisDate(value: Int): LocalDate? {
+        if (value <= 0) return null
+        return runCatching {
+            LocalDate.parse(value.toString(), DateTimeFormatter.BASIC_ISO_DATE)
+        }.getOrNull()
     }
 
     companion object {
@@ -127,7 +197,7 @@ class WebUntisSyncWorker(
             .build()
 
         fun schedule(context: Context) {
-            val periodic = PeriodicWorkRequestBuilder<WebUntisSyncWorker>(1, TimeUnit.HOURS)
+            val periodic = PeriodicWorkRequestBuilder<WebUntisSyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(networkConstraints)
                 .build()
 
