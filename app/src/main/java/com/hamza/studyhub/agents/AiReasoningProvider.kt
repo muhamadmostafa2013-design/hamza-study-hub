@@ -22,7 +22,9 @@ data class ReasoningRequest(
     val constraints: List<String> = listOf(
         "Do not invent facts that are absent from the evidence",
         "Mark uncertainty explicitly",
-        "Keep school terminology and dates faithful to the source"
+        "Keep school terminology and dates faithful to the source",
+        "For student-work analysis, explain the evidence behind each learning observation",
+        "Do not turn learning analysis into a school grade unless the parent explicitly asks"
     )
 )
 
@@ -38,5 +40,9 @@ enum class Purpose {
     PRIORITIZE_TASKS,
     SUMMARIZE_PARENT_BRIEF,
     DETECT_REPEATED_ERRORS,
-    EXPLAIN_PROGRESS
+    EXPLAIN_PROGRESS,
+    RESOLVE_BOOK_REFERENCE,
+    ANALYZE_STUDENT_WORK,
+    CLASSIFY_LEARNING_ERROR,
+    SUGGEST_TARGETED_PRACTICE
 }
