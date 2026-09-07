@@ -3,11 +3,11 @@ package com.hamza.studyhub.books
 import java.security.MessageDigest
 
 /**
- * Metadata-only book library for Hamza's private study materials.
+ * Metadata for one private study book supplied by Hamza's family.
  *
- * The app should index only the books the family provides. This layer does not
- * redistribute book content; it stores enough metadata to resolve school
- * references such as "Deutsch S. 37 Nr. 3-5" to the correct private source.
+ * The app keeps a durable URI grant to the source file. It does not redistribute
+ * the book. Page content can be read on demand only to resolve a school assignment
+ * and analyze Hamza's own learning evidence.
  */
 data class BookAsset(
     val id: String,
@@ -15,8 +15,10 @@ data class BookAsset(
     val subject: String,
     val edition: String? = null,
     val localUri: String? = null,
+    val mimeType: String? = null,
     val pageCount: Int? = null,
-    val aliases: Set<String> = emptySet()
+    val aliases: Set<String> = emptySet(),
+    val importedAt: Long = System.currentTimeMillis()
 )
 
 data class AssignmentBookReference(
@@ -112,7 +114,7 @@ class BookAssignmentResolver(
             val subjectScore = similarity(normalizedSubject, normalize(book.subject))
             val text = normalize("$title $body")
             val aliasScore = (setOf(book.title) + book.aliases)
-                .maxOfOrNull { alias -> if (text.contains(normalize(alias))) 1.0 else 0.0 }
+                .maxOfOrNull { alias -> if (normalize(alias).isNotBlank() && text.contains(normalize(alias))) 1.0 else 0.0 }
                 ?: 0.0
             book to maxOf(subjectScore, aliasScore)
         }.sortedByDescending { it.second }
