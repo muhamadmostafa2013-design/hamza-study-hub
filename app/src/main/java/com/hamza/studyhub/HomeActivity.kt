@@ -83,9 +83,9 @@ class HomeActivity : AppCompatActivity() {
         content.addView(sectionTitle("اليوم"))
         content.addView(actionCard(
             title = "🧭 متابعة الواجبات",
-            subtitle = "الجديد • يحتاج انتباه • المطلوب من حمزة",
+            subtitle = "الجديد • يحتاج انتباه • المطلوب من حمزة • الكتاب والصفحة",
             buttonText = "فتح المتابعة"
-        ) { startActivity(Intent(this, MainActivity::class.java)) })
+        ) { startActivity(Intent(this, HomeworkFeedActivity::class.java)) })
 
         content.addView(actionCard(
             title = "📚 كتب حمزة",
