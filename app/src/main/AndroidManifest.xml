@@ -25,6 +25,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".HomeworkFeedActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".books.BookLibraryActivity"
             android:exported="false" />
 
