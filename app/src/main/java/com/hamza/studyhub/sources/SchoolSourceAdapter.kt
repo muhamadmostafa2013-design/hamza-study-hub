@@ -3,7 +3,7 @@ package com.hamza.studyhub.sources
 import org.json.JSONObject
 
 /**
- * Every future school source plugs into Hamza Study Hub through this contract.
+ * Every school source plugs into Hamza Study Hub through this contract.
  * It keeps the agent pipeline independent from Teams, Untis, WhatsApp or iSchool.
  */
 interface SchoolSourceAdapter {
@@ -26,6 +26,7 @@ object SourceCatalog {
     const val WEBUNTIS = "WEBUNTIS"
     const val UNTIS_NOTIFICATION = "UNTIS_NOTIFICATION"
     const val TEAMS_NOTIFICATION = "TEAMS_NOTIFICATION"
+    const val TEAMS_GRAPH = "TEAMS_GRAPH"
     const val WHATSAPP_PARENT = "WHATSAPP_PARENT"
     const val SCREENSHOT = "SCREENSHOT"
     const val SHARED_CONTENT = "SHARED_CONTENT"
@@ -35,6 +36,7 @@ object SourceCatalog {
         WEBUNTIS,
         UNTIS_NOTIFICATION,
         TEAMS_NOTIFICATION,
+        TEAMS_GRAPH,
         WHATSAPP_PARENT,
         SCREENSHOT,
         SHARED_CONTENT,
