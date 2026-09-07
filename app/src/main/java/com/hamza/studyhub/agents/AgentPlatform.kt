@@ -18,6 +18,7 @@ object AgentOrchestrator {
     private val agents: List<StudyAgent> = listOf(
         IntakeAgent,
         HomeworkUnderstandingAgent,
+        BookReferenceAgent,
         TaskPlannerAgent,
         VerifierAgent,
         ProgressSeedAgent
@@ -29,7 +30,7 @@ object AgentOrchestrator {
             runCatching { agent.process(context) }
                 .onFailure { error -> context.addAgentError(agent.id, error.message ?: error.javaClass.simpleName) }
         }
-        context.raw.put("agentPipelineVersion", "2.0")
+        context.raw.put("agentPipelineVersion", "3.0")
         context.raw.put("agentProcessedAt", System.currentTimeMillis())
         return context.raw
     }
