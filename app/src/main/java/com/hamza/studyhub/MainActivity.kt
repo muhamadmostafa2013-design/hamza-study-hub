@@ -86,134 +86,183 @@ class MainActivity : AppCompatActivity() {
     private fun buildScreen(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(24), dp(18), dp(18))
+            setPadding(dp(16), dp(18), dp(16), dp(14))
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setBackgroundColor(Color.rgb(246, 247, 251))
+            setBackgroundColor(Color.rgb(245, 247, 250))
         }
 
-        root.addView(TextView(this).apply {
-            text = "Hamza Study Hub"
-            textSize = 28f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.END
-            setTextColor(Color.rgb(20, 24, 33))
-        })
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(17), dp(18), dp(17))
+            background = roundedBackground(Color.rgb(24, 54, 91), dp(22))
+            elevation = dp(3).toFloat()
 
-        root.addView(TextView(this).apply {
-            text = "Auto Sync + Background Monitor"
-            textSize = 16f
-            setPadding(0, dp(3), 0, dp(12))
-            gravity = Gravity.END
-            setTextColor(Color.DKGRAY)
-        })
+            addView(TextView(this@MainActivity).apply {
+                text = "HAMZA STUDY HUB"
+                textSize = 11.5f
+                letterSpacing = 0.08f
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.END
+                setTextColor(Color.rgb(184, 210, 237))
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "متابعة واجبات حمزة"
+                textSize = 27f
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.END
+                setPadding(0, dp(4), 0, dp(2))
+                setTextColor(Color.WHITE)
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "كل الواجبات والمواعيد المهمة في مكان واحد"
+                textSize = 14.5f
+                gravity = Gravity.END
+                setTextColor(Color.rgb(220, 231, 243))
+            })
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(12) })
 
         val counters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
 
-        newCountText = TextView(this).apply {
-            textSize = 15f
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            gravity = Gravity.CENTER
-            background = roundedBackground(Color.rgb(225, 238, 255), dp(14))
-            setTextColor(Color.rgb(25, 83, 153))
-        }
-        attentionCountText = TextView(this).apply {
-            textSize = 15f
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            gravity = Gravity.CENTER
-            background = roundedBackground(Color.rgb(255, 236, 218), dp(14))
-            setTextColor(Color.rgb(155, 73, 18))
-        }
+        newCountText = metricCard(
+            background = Color.rgb(232, 241, 255),
+            foreground = Color.rgb(31, 86, 155)
+        )
+        attentionCountText = metricCard(
+            background = Color.rgb(255, 239, 224),
+            foreground = Color.rgb(157, 76, 22)
+        )
         counters.addView(newCountText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(5) })
         counters.addView(attentionCountText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(5) })
         root.addView(counters)
 
-        syncStatusText = TextView(this).apply {
-            textSize = 14f
-            gravity = Gravity.END
-            setPadding(0, dp(9), 0, dp(5))
-            setTextColor(Color.rgb(52, 124, 89))
-        }
-        root.addView(syncStatusText)
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(11), dp(14), dp(11))
+            background = outlinedBackground(Color.WHITE, Color.rgb(224, 229, 235), dp(16))
 
-        val syncButton = Button(this).apply {
-            text = if (WebUntisConfigStore.isConfigured(this@MainActivity)) "🔄 مزامنة Untis الآن" else "🔗 ربط WebUntis"
-            setOnClickListener {
-                if (WebUntisConfigStore.isConfigured(this@MainActivity)) {
-                    WebUntisSyncWorker.syncNow(this@MainActivity)
-                    showShareStatus("⏳ طلبت مزامنة WebUntis الآن...")
-                } else {
-                    startActivity(Intent(this@MainActivity, LaunchActivity::class.java))
-                }
+            syncStatusText = TextView(this@MainActivity).apply {
+                textSize = 13.5f
+                gravity = Gravity.END
+                setTextColor(Color.rgb(54, 105, 77))
             }
-        }
-        root.addView(syncButton)
+            addView(syncStatusText)
+
+            addView(styledButton(
+                if (WebUntisConfigStore.isConfigured(this@MainActivity)) "مزامنة Untis الآن" else "ربط WebUntis",
+                Color.rgb(47, 132, 91)
+            ).apply {
+                setOnClickListener {
+                    if (WebUntisConfigStore.isConfigured(this@MainActivity)) {
+                        WebUntisSyncWorker.syncNow(this@MainActivity)
+                        showShareStatus("جاري تحديث بيانات WebUntis…")
+                    } else {
+                        startActivity(Intent(this@MainActivity, LaunchActivity::class.java))
+                    }
+                }
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8) })
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(10) })
+
+        root.addView(TextView(this).apply {
+            text = "المتابعة"
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.END
+            setPadding(0, dp(15), 0, dp(7))
+            setTextColor(Color.rgb(74, 81, 91))
+        })
 
         val tabs = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, dp(5), 0, dp(5))
         }
-        showAllButton = Button(this).apply {
-            text = "🆕 الجديد والكل"
+        showAllButton = styledButton("الكل والجديد", Color.rgb(25, 74, 123)).apply {
             setOnClickListener {
                 feedMode = FeedMode.ALL
                 refreshFeed()
             }
         }
-        showAttentionButton = Button(this).apply {
-            text = "⚠️ يحتاج انتباه"
+        showAttentionButton = styledButton("يحتاج انتباه", Color.rgb(180, 91, 29)).apply {
             setOnClickListener {
                 feedMode = FeedMode.ATTENTION
                 refreshFeed()
             }
         }
-        tabs.addView(showAllButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        tabs.addView(showAttentionButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        tabs.addView(showAllButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(5) })
+        tabs.addView(showAttentionButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(5) })
         root.addView(tabs)
 
-        val monitorHelp = TextView(this).apply {
-            text = "🤖 WebUntis يتفحص تلقائيًا في الخلفية تقريبًا كل 15 دقيقة بعد الربط. Teams يُلتقط من الإشعارات تلقائيًا. لو Teams أرسل عنوان الواجب فقط بدون التفاصيل، يفضل ظاهر في «يحتاج انتباه» لحد ما نفتحه مرة واحدة. Screenshot أصبح حل احتياطي فقط."
-            textSize = 14.5f
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            gravity = Gravity.END
-            background = roundedBackground(Color.rgb(255, 247, 222), dp(14))
-            setTextColor(Color.rgb(92, 67, 15))
-        }
-        root.addView(monitorHelp)
-
         shareStatusText = TextView(this).apply {
-            textSize = 14f
+            textSize = 13.5f
             gravity = Gravity.END
-            setPadding(0, dp(6), 0, dp(4))
-            setTextColor(Color.rgb(52, 124, 89))
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+            background = roundedBackground(Color.rgb(232, 247, 239), dp(12))
+            setTextColor(Color.rgb(42, 110, 76))
             visibility = View.GONE
         }
-        root.addView(shareStatusText)
+        root.addView(shareStatusText, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(8) })
 
         root.addView(Button(this).apply {
-            text = "إعداد الوصول لإشعارات Teams وUntis"
+            text = "⚙ إعدادات مصادر المدرسة والإشعارات"
+            isAllCaps = false
+            textSize = 13.5f
+            setTextColor(Color.rgb(70, 79, 91))
+            background = roundedBackground(Color.rgb(238, 241, 245), dp(12))
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             }
-        })
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(8) })
 
         feedContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(12), 0, dp(24))
         }
 
-        root.addView(ScrollView(this).apply { addView(feedContainer) }, LinearLayout.LayoutParams(
+        root.addView(ScrollView(this).apply {
+            isFillViewport = true
+            addView(feedContainer)
+        }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             0,
             1f
         ))
 
         return root
+    }
+
+    private fun metricCard(background: Int, foreground: Int): TextView = TextView(this).apply {
+        textSize = 15f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(dp(12), dp(12), dp(12), dp(12))
+        gravity = Gravity.CENTER
+        this.background = roundedBackground(background, dp(16))
+        setTextColor(foreground)
+    }
+
+    private fun styledButton(label: String, color: Int): Button = Button(this).apply {
+        text = label
+        isAllCaps = false
+        textSize = 14f
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(Color.WHITE)
+        background = roundedBackground(color, dp(13))
     }
 
     private fun refreshFeed() {
@@ -223,8 +272,8 @@ class MainActivity : AppCompatActivity() {
             it.optBoolean("needsAttention", false) && !it.optBoolean("attentionResolved", false)
         }
 
-        newCountText.text = if (newCount == 0) "✅ لا جديد" else "🆕 جديد: $newCount"
-        attentionCountText.text = if (attentionItems.isEmpty()) "✅ لا يحتاج انتباه" else "⚠️ يحتاج انتباه: ${attentionItems.size}"
+        newCountText.text = if (newCount == 0) "لا جديد" else "الجديد  $newCount"
+        attentionCountText.text = if (attentionItems.isEmpty()) "لا يحتاج انتباه" else "يحتاج انتباه  ${attentionItems.size}"
 
         updateSyncStatus()
         updateModeButtons()
@@ -235,14 +284,14 @@ class MainActivity : AppCompatActivity() {
         if (items.isEmpty()) {
             feedContainer.addView(TextView(this).apply {
                 text = if (feedMode == FeedMode.ATTENTION) {
-                    "✅ ممتاز. مفيش حاجة محتاجة تدخل منك حاليًا."
+                    "ممتاز — لا توجد عناصر تحتاج تدخلك حاليًا."
                 } else {
-                    "لسه مفيش تحديثات محفوظة. فعّل الوصول للإشعارات واربط WebUntis."
+                    "لا توجد تحديثات محفوظة حتى الآن."
                 }
-                textSize = 17f
+                textSize = 16f
                 gravity = Gravity.CENTER
-                setPadding(dp(18), dp(40), dp(18), dp(40))
-                setTextColor(Color.GRAY)
+                setPadding(dp(18), dp(42), dp(18), dp(42))
+                setTextColor(Color.rgb(115, 122, 132))
             })
             return
         }
@@ -251,22 +300,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateModeButtons() {
-        showAllButton.alpha = if (feedMode == FeedMode.ALL) 1f else 0.55f
-        showAttentionButton.alpha = if (feedMode == FeedMode.ATTENTION) 1f else 0.55f
+        showAllButton.alpha = if (feedMode == FeedMode.ALL) 1f else 0.42f
+        showAttentionButton.alpha = if (feedMode == FeedMode.ATTENTION) 1f else 0.42f
     }
 
     private fun updateSyncStatus() {
         if (!WebUntisConfigStore.isConfigured(this)) {
-            syncStatusText.text = "⚪ WebUntis غير مربوط بعد"
+            syncStatusText.text = "WebUntis غير مربوط"
+            syncStatusText.setTextColor(Color.rgb(120, 126, 136))
             return
         }
         val error = WebUntisConfigStore.lastError(this)
         val last = WebUntisConfigStore.lastSync(this)
         syncStatusText.text = when {
-            !error.isNullOrBlank() -> "⚠️ آخر مزامنة واجهت مشكلة: ${error.take(120)}"
-            last > 0L -> "✅ WebUntis Auto Sync شغال • آخر مزامنة ${formatTime(last)}"
-            else -> "⏳ WebUntis مربوط • في انتظار أول مزامنة"
+            !error.isNullOrBlank() -> "آخر تحديث واجه مشكلة: ${error.take(100)}"
+            last > 0L -> "WebUntis متصل • آخر تحديث ${formatTime(last)}"
+            else -> "WebUntis متصل • في انتظار أول تحديث"
         }
+        syncStatusText.setTextColor(
+            if (!error.isNullOrBlank()) Color.rgb(166, 86, 32) else Color.rgb(47, 119, 82)
+        )
     }
 
     private fun buildNotificationCard(item: JSONObject): View {
@@ -283,14 +336,14 @@ class MainActivity : AppCompatActivity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = roundedBackground(Color.WHITE, dp(18))
-            elevation = dp(2).toFloat()
+            background = outlinedBackground(Color.WHITE, Color.rgb(228, 232, 237), dp(18))
+            elevation = dp(1).toFloat()
         }
 
         val sourceColor = when {
             source.equals("Teams", true) -> Color.rgb(92, 94, 191)
-            source.equals("Untis", true) -> Color.rgb(52, 124, 89)
-            else -> Color.rgb(88, 96, 110)
+            source.equals("Untis", true) -> Color.rgb(47, 132, 91)
+            else -> Color.rgb(91, 99, 111)
         }
 
         val sourceRow = LinearLayout(this).apply {
@@ -298,24 +351,24 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
         }
         sourceRow.addView(TextView(this).apply {
-            text = if (isNew) "NEW 🆕" else "تمت المراجعة ✓"
-            textSize = 13f
+            text = if (isNew) "جديد" else "تمت المراجعة"
+            textSize = 12.5f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(if (isNew) Color.rgb(190, 35, 45) else Color.GRAY)
+            setTextColor(if (isNew) Color.rgb(184, 50, 57) else Color.rgb(120, 126, 136))
             setPadding(dp(10), 0, dp(10), 0)
         })
         sourceRow.addView(TextView(this).apply {
             text = when {
                 source.equals("Teams", true) -> "Teams"
-                source.equals("Untis", true) -> "Untis"
-                imported -> "محتوى مقروء"
+                source.equals("Untis", true) -> "WebUntis"
+                imported -> "محتوى مستورد"
                 else -> source
             }
-            textSize = 14f
+            textSize = 12.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            setPadding(dp(12), dp(6), dp(12), dp(6))
-            background = roundedBackground(sourceColor, dp(20))
+            setPadding(dp(11), dp(5), dp(11), dp(5))
+            background = roundedBackground(sourceColor, dp(18))
         })
         card.addView(sourceRow)
 
@@ -323,13 +376,13 @@ class MainActivity : AppCompatActivity() {
             val change = item.optString("syncChange")
             text = buildString {
                 append("${interpretation.emoji} ${interpretation.label}")
-                if (change == "new") append(" • جديد تلقائيًا")
-                if (change == "updated") append(" • تم تعديله")
+                if (change == "new") append(" • جديد")
+                if (change == "updated") append(" • تم التعديل")
             }
-            textSize = 14f
+            textSize = 13.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(typeColor(interpretation.type))
-            setPadding(0, dp(9), 0, 0)
+            setPadding(0, dp(10), 0, 0)
             gravity = Gravity.END
         })
 
@@ -338,102 +391,117 @@ class MainActivity : AppCompatActivity() {
             textSize = 19f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.END
-            setPadding(0, dp(8), 0, dp(4))
-            setTextColor(Color.rgb(25, 28, 36))
+            setPadding(0, dp(6), 0, dp(4))
+            setTextColor(Color.rgb(28, 33, 40))
         })
 
         val dueDate = item.optInt("dueDate", 0)
         if (dueDate > 0) {
             card.addView(TextView(this).apply {
-                text = "📅 التسليم: ${formatUntisDate(dueDate)}"
-                textSize = 14.5f
+                text = "التسليم  ${formatUntisDate(dueDate)}"
+                textSize = 14f
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.END
-                setTextColor(Color.rgb(130, 73, 22))
+                setPadding(0, 0, 0, dp(6))
+                setTextColor(Color.rgb(131, 76, 30))
             })
         }
 
         card.addView(TextView(this).apply {
-            text = body.ifBlank { "لا يوجد نص إضافي في المصدر." }
-            textSize = 16f
+            text = body.ifBlank { "لا توجد تفاصيل إضافية في المصدر." }
+            textSize = 15.5f
             gravity = Gravity.END
-            setTextColor(Color.DKGRAY)
+            setTextColor(Color.rgb(70, 76, 86))
         })
 
         if (needsAttention) {
             card.addView(TextView(this).apply {
-                text = "⚠️ يحتاج انتباه\n${attentionReason.ifBlank { "المعلومة تحتاج مراجعة منك." }}"
-                textSize = 14.5f
+                text = "يحتاج انتباه\n${attentionReason.ifBlank { "المعلومة تحتاج مراجعة منك." }}"
+                textSize = 14f
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.END
                 setPadding(dp(12), dp(10), dp(12), dp(10))
-                background = roundedBackground(Color.rgb(255, 236, 218), dp(12))
-                setTextColor(Color.rgb(139, 67, 18))
-            })
+                background = roundedBackground(Color.rgb(255, 241, 228), dp(12))
+                setTextColor(Color.rgb(145, 72, 24))
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(10) })
         }
 
         if (interpretation.type == UpdateType.HOMEWORK || imported) {
             card.addView(TextView(this).apply {
-                text = "🎯 المطلوب من حمزة"
-                textSize = 17f
+                text = "المطلوب من حمزة"
+                textSize = 15.5f
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.END
-                setPadding(0, dp(14), 0, dp(6))
-                setTextColor(Color.rgb(20, 77, 115))
+                setPadding(0, dp(12), 0, dp(5))
+                setTextColor(Color.rgb(25, 74, 123))
             })
 
             card.addView(TextView(this).apply {
                 val steps = interpretation.steps.ifEmpty {
-                    listOf("اقرأ النص الكامل وحدد تعليمات المدرس قبل البدء.")
+                    listOf("راجع تعليمات المدرس كاملة قبل البدء.")
                 }
                 text = steps.mapIndexed { index, step -> "${index + 1}. $step" }.joinToString("\n")
-                textSize = 15.5f
+                textSize = 14.5f
                 gravity = Gravity.END
                 setPadding(dp(12), dp(10), dp(12), dp(10))
-                background = roundedBackground(Color.rgb(238, 247, 255), dp(12))
-                setTextColor(Color.rgb(31, 55, 73))
+                background = roundedBackground(Color.rgb(239, 246, 253), dp(12))
+                setTextColor(Color.rgb(44, 65, 85))
             })
         }
 
         card.addView(TextView(this).apply {
             text = formatTime(timestamp)
-            textSize = 13f
+            textSize = 12.5f
             gravity = Gravity.END
-            setPadding(0, dp(10), 0, 0)
-            setTextColor(Color.GRAY)
+            setPadding(0, dp(10), 0, dp(2))
+            setTextColor(Color.rgb(132, 138, 147))
         })
 
         if (source.equals("Teams", true) || source.equals("Untis", true)) {
-            card.addView(Button(this).apply {
-                text = "فتح $source"
+            card.addView(styledButton("فتح المصدر", sourceColor).apply {
                 setOnClickListener { openSourceApp(source) }
-            })
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(7) })
         }
 
         if (needsAttention) {
-            card.addView(Button(this).apply {
-                text = "✅ تم التعامل مع التنبيه"
+            card.addView(styledButton("تم التعامل مع التنبيه", Color.rgb(166, 92, 36)).apply {
                 setOnClickListener {
                     resolveAttention(item)
                     refreshFeed()
                 }
-            })
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(7) })
         }
 
         if (isNew) {
             card.addView(Button(this).apply {
-                text = "تمت المراجعة"
+                text = "تحديد كمراجَع"
+                isAllCaps = false
+                textSize = 13.5f
+                setTextColor(Color.rgb(65, 73, 84))
+                background = roundedBackground(Color.rgb(237, 240, 244), dp(12))
                 setOnClickListener {
                     markAsReviewed(item)
                     refreshFeed()
                 }
-            })
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(7) })
         }
 
         card.layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(12) }
+        ).apply { bottomMargin = dp(10) }
 
         return card
     }
@@ -446,7 +514,7 @@ class MainActivity : AppCompatActivity() {
                 val text = incoming.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
                 if (text.isNotBlank()) {
                     saveImportedContent("واجب تمت مشاركته", text, "Shared text")
-                    showShareStatus("✅ تم قراءة النص المشارك وإضافته")
+                    showShareStatus("تمت قراءة النص المشارك وإضافته")
                     refreshFeed()
                 }
             }
@@ -460,7 +528,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun readHomeworkScreenshot(uri: Uri) {
-        showShareStatus("⏳ جاري قراءة Screenshot الواجب...")
+        showShareStatus("جاري قراءة صورة الواجب…")
         runCatching { InputImage.fromFilePath(this, uri) }
             .onSuccess { image ->
                 TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -468,16 +536,16 @@ class MainActivity : AppCompatActivity() {
                     .addOnSuccessListener { result ->
                         val text = result.text.trim()
                         if (text.isBlank()) {
-                            showShareStatus("⚠️ لم أستطع استخراج نص واضح من الصورة")
+                            showShareStatus("لم أستطع استخراج نص واضح من الصورة")
                         } else {
                             saveImportedContent("واجب مقروء من Screenshot", text, "Screenshot OCR")
-                            showShareStatus("✅ تم قراءة Screenshot وتحويل المطلوب إلى خطوات")
+                            showShareStatus("تمت قراءة الصورة وتحويل المطلوب إلى خطوات")
                             refreshFeed()
                         }
                     }
-                    .addOnFailureListener { showShareStatus("⚠️ حدث خطأ أثناء قراءة الصورة") }
+                    .addOnFailureListener { showShareStatus("حدث خطأ أثناء قراءة الصورة") }
             }
-            .onFailure { showShareStatus("⚠️ لم أستطع فتح الصورة") }
+            .onFailure { showShareStatus("لم أستطع فتح الصورة") }
     }
 
     private fun saveImportedContent(title: String, text: String, importMethod: String) {
@@ -525,7 +593,7 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         }
-        showShareStatus("⚠️ تطبيق $source غير موجود على الجهاز")
+        showShareStatus("تطبيق $source غير موجود على الجهاز")
     }
 
     private fun readNotifications(): List<JSONObject> {
@@ -596,6 +664,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun roundedBackground(color: Int, radius: Int): GradientDrawable = GradientDrawable().apply {
         setColor(color)
+        cornerRadius = radius.toFloat()
+    }
+
+    private fun outlinedBackground(fill: Int, stroke: Int, radius: Int): GradientDrawable = GradientDrawable().apply {
+        setColor(fill)
+        setStroke(dp(1), stroke)
         cornerRadius = radius.toFloat()
     }
 
