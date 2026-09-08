@@ -4,15 +4,11 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.view.Gravity
 import android.view.View
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -22,10 +18,21 @@ import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.android.material.button.MaterialButton
+import com.hamza.studyhub.agents.AgentOrchestrator
+import com.hamza.studyhub.books.BookAssignmentResolver
+import com.hamza.studyhub.books.BookLibraryActivity
+import com.hamza.studyhub.books.BookLibraryStore
+import com.hamza.studyhub.books.ResolutionStatus
 import com.hamza.studyhub.homework.HomeworkInterpreter
 import com.hamza.studyhub.homework.UpdateType
+import com.hamza.studyhub.learning.StudentWorkCaptureActivity
+import com.hamza.studyhub.teams.TeamsAuthStore
+import com.hamza.studyhub.teams.TeamsSyncWorker
+import com.hamza.studyhub.ui.HamzaUi
 import com.hamza.studyhub.webuntis.WebUntisConfigStore
 import com.hamza.studyhub.webuntis.WebUntisSyncWorker
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -35,23 +42,20 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
-
     private enum class FeedMode { ALL, ATTENTION }
 
     private lateinit var feedContainer: LinearLayout
     private lateinit var newCountText: TextView
     private lateinit var attentionCountText: TextView
-    private lateinit var shareStatusText: TextView
     private lateinit var syncStatusText: TextView
-    private lateinit var showAllButton: Button
-    private lateinit var showAttentionButton: Button
+    private lateinit var shareStatusText: TextView
+    private lateinit var allButton: MaterialButton
+    private lateinit var attentionButton: MaterialButton
     private var feedMode = FeedMode.ALL
 
     private val dataFile by lazy { File(filesDir, "school_notifications.jsonl") }
-
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { }
+    private val bookStore by lazy { BookLibraryStore(this) }
+    private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,10 +63,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(buildScreen())
         requestNotificationPermissionIfNeeded()
         processIncomingShare(intent)
-
-        if (WebUntisConfigStore.isConfigured(this)) {
-            WebUntisSyncWorker.schedule(this)
-        }
+        scheduleSources()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -76,9 +77,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         if (WebUntisConfigStore.isConfigured(this)) {
             val last = WebUntisConfigStore.lastSync(this)
-            if (last == 0L || System.currentTimeMillis() - last > 5 * 60 * 1000L) {
-                WebUntisSyncWorker.syncNow(this)
-            }
+            if (last == 0L || System.currentTimeMillis() - last > 5 * 60 * 1000L) WebUntisSyncWorker.syncNow(this)
         }
         refreshFeed()
     }
@@ -86,442 +85,170 @@ class MainActivity : AppCompatActivity() {
     private fun buildScreen(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(18), dp(16), dp(14))
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setBackgroundColor(Color.rgb(245, 247, 250))
+            setPadding(HamzaUi.dp(this@MainActivity, 18), HamzaUi.dp(this@MainActivity, 20), HamzaUi.dp(this@MainActivity, 18), HamzaUi.dp(this@MainActivity, 16))
+            setBackgroundColor(HamzaUi.bg)
         }
+        root.addView(HamzaUi.title(this, "الواجبات"))
+        root.addView(HamzaUi.subtitle(this, "كل تحديث مدرسي في سجل واحد، مع فصل الواضح عن اللي يحتاج تدخل منك."), HamzaUi.marginTop(this, 4))
 
-        root.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(17), dp(18), dp(17))
-            background = roundedBackground(Color.rgb(24, 54, 91), dp(22))
-            elevation = dp(3).toFloat()
+        val summaryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        newCountText = HamzaUi.softPill(this, "0\nجديد", 0xFFE8F1FF.toInt(), HamzaUi.blue).apply { gravity = Gravity.CENTER; minHeight = HamzaUi.dp(this@MainActivity, 62) }
+        attentionCountText = HamzaUi.softPill(this, "0\nيحتاج انتباه", 0xFFFFEFE2.toInt(), HamzaUi.amber).apply { gravity = Gravity.CENTER; minHeight = HamzaUi.dp(this@MainActivity, 62) }
+        summaryRow.addView(newCountText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = HamzaUi.dp(this@MainActivity, 5) })
+        summaryRow.addView(attentionCountText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = HamzaUi.dp(this@MainActivity, 5) })
+        root.addView(summaryRow, HamzaUi.marginTop(this, 14))
 
-            addView(TextView(this@MainActivity).apply {
-                text = "HAMZA STUDY HUB"
-                textSize = 11.5f
-                letterSpacing = 0.08f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.END
-                setTextColor(Color.rgb(184, 210, 237))
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = "متابعة واجبات حمزة"
-                textSize = 27f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.END
-                setPadding(0, dp(4), 0, dp(2))
-                setTextColor(Color.WHITE)
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = "كل الواجبات والمواعيد المهمة في مكان واحد"
-                textSize = 14.5f
-                gravity = Gravity.END
-                setTextColor(Color.rgb(220, 231, 243))
-            })
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(12) })
+        syncStatusText = HamzaUi.statusBox(this, "", 0xFFF0F4F8.toInt(), HamzaUi.muted)
+        root.addView(syncStatusText, HamzaUi.marginTop(this, 10))
 
-        val counters = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        allButton = HamzaUi.primaryButton(this, "الكل والجديد").apply {
+            tag = "feed_all"; setOnClickListener { feedMode = FeedMode.ALL; refreshFeed() }
         }
-
-        newCountText = metricCard(
-            background = Color.rgb(232, 241, 255),
-            foreground = Color.rgb(31, 86, 155)
-        )
-        attentionCountText = metricCard(
-            background = Color.rgb(255, 239, 224),
-            foreground = Color.rgb(157, 76, 22)
-        )
-        counters.addView(newCountText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(5) })
-        counters.addView(attentionCountText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(5) })
-        root.addView(counters)
-
-        root.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(11), dp(14), dp(11))
-            background = outlinedBackground(Color.WHITE, Color.rgb(224, 229, 235), dp(16))
-
-            syncStatusText = TextView(this@MainActivity).apply {
-                textSize = 13.5f
-                gravity = Gravity.END
-                setTextColor(Color.rgb(54, 105, 77))
-            }
-            addView(syncStatusText)
-
-            addView(styledButton(
-                if (WebUntisConfigStore.isConfigured(this@MainActivity)) "مزامنة Untis الآن" else "ربط WebUntis",
-                Color.rgb(47, 132, 91)
-            ).apply {
-                setOnClickListener {
-                    if (WebUntisConfigStore.isConfigured(this@MainActivity)) {
-                        WebUntisSyncWorker.syncNow(this@MainActivity)
-                        showShareStatus("جاري تحديث بيانات WebUntis…")
-                    } else {
-                        startActivity(Intent(this@MainActivity, LaunchActivity::class.java))
-                    }
-                }
-            }, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(8) })
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(10) })
-
-        root.addView(TextView(this).apply {
-            text = "المتابعة"
-            textSize = 15f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.END
-            setPadding(0, dp(15), 0, dp(7))
-            setTextColor(Color.rgb(74, 81, 91))
-        })
-
-        val tabs = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+        attentionButton = HamzaUi.secondaryButton(this, "يحتاج انتباه", HamzaUi.amber).apply {
+            tag = "feed_attention"; setOnClickListener { feedMode = FeedMode.ATTENTION; refreshFeed() }
         }
-        showAllButton = styledButton("الكل والجديد", Color.rgb(25, 74, 123)).apply {
-            setOnClickListener {
-                feedMode = FeedMode.ALL
-                refreshFeed()
-            }
-        }
-        showAttentionButton = styledButton("يحتاج انتباه", Color.rgb(180, 91, 29)).apply {
-            setOnClickListener {
-                feedMode = FeedMode.ATTENTION
-                refreshFeed()
-            }
-        }
-        tabs.addView(showAllButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(5) })
-        tabs.addView(showAttentionButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(5) })
-        root.addView(tabs)
+        tabs.addView(allButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = HamzaUi.dp(this@MainActivity, 5) })
+        tabs.addView(attentionButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = HamzaUi.dp(this@MainActivity, 5) })
+        root.addView(tabs, HamzaUi.marginTop(this, 10))
 
-        shareStatusText = TextView(this).apply {
-            textSize = 13.5f
-            gravity = Gravity.END
-            setPadding(dp(12), dp(9), dp(12), dp(9))
-            background = roundedBackground(Color.rgb(232, 247, 239), dp(12))
-            setTextColor(Color.rgb(42, 110, 76))
-            visibility = View.GONE
-        }
-        root.addView(shareStatusText, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(8) })
+        shareStatusText = HamzaUi.statusBox(this, "", 0xFFEAF6EF.toInt(), HamzaUi.green).apply { visibility = View.GONE }
+        root.addView(shareStatusText, HamzaUi.marginTop(this, 8))
 
-        root.addView(Button(this).apply {
-            text = "⚙ إعدادات مصادر المدرسة والإشعارات"
-            isAllCaps = false
-            textSize = 13.5f
-            setTextColor(Color.rgb(70, 79, 91))
-            background = roundedBackground(Color.rgb(238, 241, 245), dp(12))
-            setOnClickListener {
-                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-            }
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(8) })
+        val utilityRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        utilityRow.addView(HamzaUi.secondaryButton(this, "المصادر").apply {
+            tag = "feed_sources"; setOnClickListener { startActivity(Intent(this@MainActivity, SourceHubActivity::class.java)) }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = HamzaUi.dp(this@MainActivity, 5) })
+        utilityRow.addView(HamzaUi.secondaryButton(this, "الكتب").apply {
+            tag = "feed_books"; setOnClickListener { startActivity(Intent(this@MainActivity, BookLibraryActivity::class.java)) }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = HamzaUi.dp(this@MainActivity, 5) })
+        root.addView(utilityRow, HamzaUi.marginTop(this, 8))
 
-        feedContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(12), 0, dp(24))
-        }
-
-        root.addView(ScrollView(this).apply {
-            isFillViewport = true
-            addView(feedContainer)
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            0,
-            1f
-        ))
-
+        feedContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, HamzaUi.dp(this@MainActivity, 12), 0, HamzaUi.dp(this@MainActivity, 24)) }
+        root.addView(ScrollView(this).apply { addView(feedContainer) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         return root
     }
 
-    private fun metricCard(background: Int, foreground: Int): TextView = TextView(this).apply {
-        textSize = 15f
-        setTypeface(typeface, Typeface.BOLD)
-        setPadding(dp(12), dp(12), dp(12), dp(12))
-        gravity = Gravity.CENTER
-        this.background = roundedBackground(background, dp(16))
-        setTextColor(foreground)
-    }
-
-    private fun styledButton(label: String, color: Int): Button = Button(this).apply {
-        text = label
-        isAllCaps = false
-        textSize = 14f
-        setTypeface(typeface, Typeface.BOLD)
-        setTextColor(Color.WHITE)
-        background = roundedBackground(color, dp(13))
-    }
-
     private fun refreshFeed() {
-        val allItems = readNotifications().sortedByDescending { it.optLong("timestamp") }
+        val allItems = readAndUpgradeNotifications().sortedByDescending { it.optLong("timestamp") }
+        val attention = allItems.filter { it.optBoolean("needsAttention", false) && !it.optBoolean("attentionResolved", false) }
         val newCount = allItems.count { it.optBoolean("isNew", true) }
-        val attentionItems = allItems.filter {
-            it.optBoolean("needsAttention", false) && !it.optBoolean("attentionResolved", false)
-        }
-
-        newCountText.text = if (newCount == 0) "لا جديد" else "الجديد  $newCount"
-        attentionCountText.text = if (attentionItems.isEmpty()) "لا يحتاج انتباه" else "يحتاج انتباه  ${attentionItems.size}"
-
+        newCountText.text = "$newCount\nجديد"
+        attentionCountText.text = "${attention.size}\nيحتاج انتباه"
         updateSyncStatus()
-        updateModeButtons()
+        allButton.alpha = if (feedMode == FeedMode.ALL) 1f else 0.72f
+        attentionButton.alpha = if (feedMode == FeedMode.ATTENTION) 1f else 0.72f
 
-        val items = if (feedMode == FeedMode.ATTENTION) attentionItems else allItems
+        val visible = if (feedMode == FeedMode.ATTENTION) attention else allItems
         feedContainer.removeAllViews()
-
-        if (items.isEmpty()) {
-            feedContainer.addView(TextView(this).apply {
-                text = if (feedMode == FeedMode.ATTENTION) {
-                    "ممتاز — لا توجد عناصر تحتاج تدخلك حاليًا."
-                } else {
-                    "لا توجد تحديثات محفوظة حتى الآن."
-                }
-                textSize = 16f
-                gravity = Gravity.CENTER
-                setPadding(dp(18), dp(42), dp(18), dp(42))
-                setTextColor(Color.rgb(115, 122, 132))
-            })
+        if (visible.isEmpty()) {
+            feedContainer.addView(HamzaUi.statusBox(this,
+                if (feedMode == FeedMode.ATTENTION) "لا يوجد شيء يحتاج تدخل منك حاليًا." else "لا توجد تحديثات محفوظة بعد.",
+                Color.WHITE, HamzaUi.muted))
             return
         }
-
-        items.forEach { item -> feedContainer.addView(buildNotificationCard(item)) }
-    }
-
-    private fun updateModeButtons() {
-        showAllButton.alpha = if (feedMode == FeedMode.ALL) 1f else 0.42f
-        showAttentionButton.alpha = if (feedMode == FeedMode.ATTENTION) 1f else 0.42f
-    }
-
-    private fun updateSyncStatus() {
-        if (!WebUntisConfigStore.isConfigured(this)) {
-            syncStatusText.text = "WebUntis غير مربوط"
-            syncStatusText.setTextColor(Color.rgb(120, 126, 136))
-            return
-        }
-        val error = WebUntisConfigStore.lastError(this)
-        val last = WebUntisConfigStore.lastSync(this)
-        syncStatusText.text = when {
-            !error.isNullOrBlank() -> "آخر تحديث واجه مشكلة: ${error.take(100)}"
-            last > 0L -> "WebUntis متصل • آخر تحديث ${formatTime(last)}"
-            else -> "WebUntis متصل • في انتظار أول تحديث"
-        }
-        syncStatusText.setTextColor(
-            if (!error.isNullOrBlank()) Color.rgb(166, 86, 32) else Color.rgb(47, 119, 82)
-        )
+        visible.forEach { feedContainer.addView(buildNotificationCard(it)) }
     }
 
     private fun buildNotificationCard(item: JSONObject): View {
         val source = item.optString("source", "School")
         val title = item.optString("title").ifBlank { "تحديث جديد" }
-        val body = item.optString("bigText").ifBlank { item.optString("text") }
-        val timestamp = item.optLong("timestamp")
-        val isNew = item.optBoolean("isNew", true)
-        val imported = item.optBoolean("imported", false)
+        val bodyText = item.optString("bigText").ifBlank { item.optString("text") }
+        val interpretation = HomeworkInterpreter.interpret(title, bodyText)
         val needsAttention = item.optBoolean("needsAttention", false) && !item.optBoolean("attentionResolved", false)
-        val attentionReason = item.optString("attentionReason")
-        val interpretation = HomeworkInterpreter.interpret(title, body)
+        val subject = item.optString("subject").ifBlank { title.substringAfter("•", "").trim() }
+        val referenceDetected = item.optBoolean("bookReferenceDetected", false)
+        val resolved = if (referenceDetected) BookAssignmentResolver(bookStore).resolve(subject, title, bodyText) else null
+        val exercises = item.optJSONArray("bookExercises")?.toStringList().orEmpty()
+        val page = item.optInt("bookPage", 0).takeIf { it > 0 } ?: resolved?.reference?.page
 
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = outlinedBackground(Color.WHITE, Color.rgb(228, 232, 237), dp(18))
-            elevation = dp(1).toFloat()
-        }
-
+        val card = HamzaUi.card(this)
+        val body = HamzaUi.cardContent(card)
         val sourceColor = when {
-            source.equals("Teams", true) -> Color.rgb(92, 94, 191)
-            source.equals("Untis", true) -> Color.rgb(47, 132, 91)
-            else -> Color.rgb(91, 99, 111)
+            source.equals("Teams", true) -> HamzaUi.purple
+            source.equals("Untis", true) -> HamzaUi.green
+            else -> HamzaUi.muted
         }
+        val topRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        topRow.addView(HamzaUi.softPill(this,
+            if (source.equals("Teams", true)) "Teams" else if (source.equals("Untis", true)) "Untis" else source,
+            Color.argb(22, Color.red(sourceColor), Color.green(sourceColor), Color.blue(sourceColor)), sourceColor),
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        if (item.optBoolean("isNew", true)) topRow.addView(HamzaUi.softPill(this, "جديد", 0xFFFFE9EA.toInt(), HamzaUi.danger))
+        body.addView(topRow)
 
-        val sourceRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.END
-        }
-        sourceRow.addView(TextView(this).apply {
-            text = if (isNew) "جديد" else "تمت المراجعة"
-            textSize = 12.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(if (isNew) Color.rgb(184, 50, 57) else Color.rgb(120, 126, 136))
-            setPadding(dp(10), 0, dp(10), 0)
-        })
-        sourceRow.addView(TextView(this).apply {
-            text = when {
-                source.equals("Teams", true) -> "Teams"
-                source.equals("Untis", true) -> "WebUntis"
-                imported -> "محتوى مستورد"
-                else -> source
+        body.addView(HamzaUi.title(this, title, 18.5f), HamzaUi.marginTop(this, 10))
+        val due = item.optInt("dueDate", 0)
+        if (due > 0) body.addView(HamzaUi.subtitle(this, "التسليم: ${formatUntisDate(due)}"), HamzaUi.marginTop(this, 3))
+        body.addView(TextView(this).apply {
+            text = bodyText.ifBlank { "المصدر لم يرسل وصفًا إضافيًا." }
+            textSize = 15.5f; gravity = Gravity.END; setTextColor(HamzaUi.ink)
+        }, HamzaUi.marginTop(this, 8))
+
+        if (needsAttention) body.addView(HamzaUi.statusBox(this,
+            item.optString("attentionReason").ifBlank { "هذه المعلومة تحتاج مراجعة منك." },
+            0xFFFFEFE2.toInt(), HamzaUi.amber), HamzaUi.marginTop(this, 10))
+
+        val steps = item.optJSONArray("understoodSteps")?.toStringList().orEmpty()
+        if (steps.isNotEmpty() && interpretation.type == UpdateType.HOMEWORK) body.addView(HamzaUi.statusBox(this,
+            "المطلوب من حمزة\n" + steps.mapIndexed { index, step -> "${index + 1}. $step" }.joinToString("\n"),
+            0xFFEFF5FC.toInt(), HamzaUi.blue), HamzaUi.marginTop(this, 10))
+
+        if (referenceDetected) {
+            val bookMessage = when {
+                resolved?.status == ResolutionStatus.RESOLVED && resolved.book != null ->
+                    "${resolved.book.subject} • ${resolved.book.title}\nصفحة ${page ?: "?"}" + if (exercises.isNotEmpty()) " • تمرين ${exercises.joinToString(", ")}" else ""
+                bookStore.allBooks().isEmpty() -> "تم اكتشاف صفحة ${page ?: "?"}، لكن لم تتم إضافة كتاب لهذه المادة بعد."
+                else -> "تم اكتشاف صفحة ${page ?: "?"}، والكتاب يحتاج تأكيد."
             }
-            textSize = 12.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            setPadding(dp(11), dp(5), dp(11), dp(5))
-            background = roundedBackground(sourceColor, dp(18))
-        })
-        card.addView(sourceRow)
+            body.addView(HamzaUi.statusBox(this, bookMessage, 0xFFEAF6EF.toInt(), HamzaUi.green), HamzaUi.marginTop(this, 10))
+            if (resolved?.book == null) body.addView(HamzaUi.secondaryButton(this, "ربط الكتاب").apply {
+                tag = "assignment_book_${item.optLong("timestamp")}"; setOnClickListener { startActivity(Intent(this@MainActivity, BookLibraryActivity::class.java)) }
+            }, HamzaUi.marginTop(this, 8))
+            body.addView(HamzaUi.primaryButton(this, "تصوير حل حمزة بعد الانتهاء").apply {
+                tag = "assignment_capture_${item.optLong("timestamp")}"; setOnClickListener {
+                    startActivity(Intent(this@MainActivity, StudentWorkCaptureActivity::class.java).apply {
+                        putExtra(StudentWorkCaptureActivity.EXTRA_ASSIGNMENT_FINGERPRINT,
+                            item.optString("externalId").ifBlank { item.optString("contentFingerprint") }.ifBlank { item.optLong("timestamp").toString() })
+                        putExtra(StudentWorkCaptureActivity.EXTRA_SUBJECT, subject)
+                        putExtra(StudentWorkCaptureActivity.EXTRA_BOOK_ID, resolved?.book?.id.orEmpty())
+                        putExtra(StudentWorkCaptureActivity.EXTRA_PAGE, page ?: 0)
+                        putExtra(StudentWorkCaptureActivity.EXTRA_EXERCISE, exercises.firstOrNull().orEmpty())
+                    })
+                }
+            }, HamzaUi.marginTop(this, 8))
+        }
 
-        card.addView(TextView(this).apply {
-            val change = item.optString("syncChange")
-            text = buildString {
-                append("${interpretation.emoji} ${interpretation.label}")
-                if (change == "new") append(" • جديد")
-                if (change == "updated") append(" • تم التعديل")
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val sourceUrl = item.optString("sourceUrl")
+        val canOpenSource = sourceUrl.isNotBlank() || source.equals("Teams", true) || source.equals("Untis", true)
+        if (canOpenSource) actions.addView(HamzaUi.secondaryButton(this, "فتح المصدر").apply {
+            tag = "assignment_source_${item.optLong("timestamp")}"; setOnClickListener {
+                if (sourceUrl.isNotBlank()) startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(sourceUrl))) else openSourceApp(source)
             }
-            textSize = 13.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(typeColor(interpretation.type))
-            setPadding(0, dp(10), 0, 0)
-            gravity = Gravity.END
-        })
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = HamzaUi.dp(this@MainActivity, 4) })
+        if (needsAttention) actions.addView(HamzaUi.secondaryButton(this, "تم التعامل", HamzaUi.amber).apply {
+            tag = "assignment_resolve_${item.optLong("timestamp")}"; setOnClickListener { resolveAttention(item); refreshFeed() }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = HamzaUi.dp(this@MainActivity, 4) })
+        else if (item.optBoolean("isNew", true)) actions.addView(HamzaUi.secondaryButton(this, "تمت المراجعة").apply {
+            tag = "assignment_review_${item.optLong("timestamp")}"; setOnClickListener { markAsReviewed(item); refreshFeed() }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = HamzaUi.dp(this@MainActivity, 4) })
+        if (actions.childCount > 0) body.addView(actions, HamzaUi.marginTop(this, 10))
 
-        card.addView(TextView(this).apply {
-            text = title
-            textSize = 19f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.END
-            setPadding(0, dp(6), 0, dp(4))
-            setTextColor(Color.rgb(28, 33, 40))
-        })
-
-        val dueDate = item.optInt("dueDate", 0)
-        if (dueDate > 0) {
-            card.addView(TextView(this).apply {
-                text = "التسليم  ${formatUntisDate(dueDate)}"
-                textSize = 14f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.END
-                setPadding(0, 0, 0, dp(6))
-                setTextColor(Color.rgb(131, 76, 30))
-            })
-        }
-
-        card.addView(TextView(this).apply {
-            text = body.ifBlank { "لا توجد تفاصيل إضافية في المصدر." }
-            textSize = 15.5f
-            gravity = Gravity.END
-            setTextColor(Color.rgb(70, 76, 86))
-        })
-
-        if (needsAttention) {
-            card.addView(TextView(this).apply {
-                text = "يحتاج انتباه\n${attentionReason.ifBlank { "المعلومة تحتاج مراجعة منك." }}"
-                textSize = 14f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.END
-                setPadding(dp(12), dp(10), dp(12), dp(10))
-                background = roundedBackground(Color.rgb(255, 241, 228), dp(12))
-                setTextColor(Color.rgb(145, 72, 24))
-            }, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(10) })
-        }
-
-        if (interpretation.type == UpdateType.HOMEWORK || imported) {
-            card.addView(TextView(this).apply {
-                text = "المطلوب من حمزة"
-                textSize = 15.5f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.END
-                setPadding(0, dp(12), 0, dp(5))
-                setTextColor(Color.rgb(25, 74, 123))
-            })
-
-            card.addView(TextView(this).apply {
-                val steps = interpretation.steps.ifEmpty {
-                    listOf("راجع تعليمات المدرس كاملة قبل البدء.")
-                }
-                text = steps.mapIndexed { index, step -> "${index + 1}. $step" }.joinToString("\n")
-                textSize = 14.5f
-                gravity = Gravity.END
-                setPadding(dp(12), dp(10), dp(12), dp(10))
-                background = roundedBackground(Color.rgb(239, 246, 253), dp(12))
-                setTextColor(Color.rgb(44, 65, 85))
-            })
-        }
-
-        card.addView(TextView(this).apply {
-            text = formatTime(timestamp)
-            textSize = 12.5f
-            gravity = Gravity.END
-            setPadding(0, dp(10), 0, dp(2))
-            setTextColor(Color.rgb(132, 138, 147))
-        })
-
-        if (source.equals("Teams", true) || source.equals("Untis", true)) {
-            card.addView(styledButton("فتح المصدر", sourceColor).apply {
-                setOnClickListener { openSourceApp(source) }
-            }, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(7) })
-        }
-
-        if (needsAttention) {
-            card.addView(styledButton("تم التعامل مع التنبيه", Color.rgb(166, 92, 36)).apply {
-                setOnClickListener {
-                    resolveAttention(item)
-                    refreshFeed()
-                }
-            }, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(7) })
-        }
-
-        if (isNew) {
-            card.addView(Button(this).apply {
-                text = "تحديد كمراجَع"
-                isAllCaps = false
-                textSize = 13.5f
-                setTextColor(Color.rgb(65, 73, 84))
-                background = roundedBackground(Color.rgb(237, 240, 244), dp(12))
-                setOnClickListener {
-                    markAsReviewed(item)
-                    refreshFeed()
-                }
-            }, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(7) })
-        }
-
-        card.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(10) }
-
+        body.addView(HamzaUi.subtitle(this, formatTime(item.optLong("timestamp"))), HamzaUi.marginTop(this, 8))
+        card.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = HamzaUi.dp(this@MainActivity, 10) }
         return card
     }
 
     private fun processIncomingShare(incoming: Intent?) {
         if (incoming?.action != Intent.ACTION_SEND) return
-
         when {
-            incoming.type?.startsWith("text/") == true -> {
-                val text = incoming.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
-                if (text.isNotBlank()) {
-                    saveImportedContent("واجب تمت مشاركته", text, "Shared text")
-                    showShareStatus("تمت قراءة النص المشارك وإضافته")
-                    refreshFeed()
-                }
+            incoming.type?.startsWith("text/") == true -> incoming.getStringExtra(Intent.EXTRA_TEXT).orEmpty().takeIf { it.isNotBlank() }?.let {
+                saveImportedContent("واجب تمت مشاركته", it, "Shared text"); showShareStatus("تمت إضافة النص المشارك."); refreshFeed()
             }
-
             incoming.type?.startsWith("image/") == true -> {
-                @Suppress("DEPRECATION")
-                val uri = incoming.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+                @Suppress("DEPRECATION") val uri = incoming.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
                 if (uri != null) readHomeworkScreenshot(uri)
             }
         }
@@ -529,48 +256,73 @@ class MainActivity : AppCompatActivity() {
 
     private fun readHomeworkScreenshot(uri: Uri) {
         showShareStatus("جاري قراءة صورة الواجب…")
-        runCatching { InputImage.fromFilePath(this, uri) }
-            .onSuccess { image ->
-                TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                    .process(image)
-                    .addOnSuccessListener { result ->
-                        val text = result.text.trim()
-                        if (text.isBlank()) {
-                            showShareStatus("لم أستطع استخراج نص واضح من الصورة")
-                        } else {
-                            saveImportedContent("واجب مقروء من Screenshot", text, "Screenshot OCR")
-                            showShareStatus("تمت قراءة الصورة وتحويل المطلوب إلى خطوات")
-                            refreshFeed()
-                        }
-                    }
-                    .addOnFailureListener { showShareStatus("حدث خطأ أثناء قراءة الصورة") }
-            }
-            .onFailure { showShareStatus("لم أستطع فتح الصورة") }
+        runCatching { InputImage.fromFilePath(this, uri) }.onSuccess { image ->
+            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(image)
+                .addOnSuccessListener { result ->
+                    val text = result.text.trim()
+                    if (text.isBlank()) showShareStatus("لم أستطع استخراج نص واضح من الصورة.")
+                    else { saveImportedContent("واجب مقروء من صورة", text, "Screenshot OCR"); showShareStatus("تمت قراءة الصورة وإضافتها."); refreshFeed() }
+                }.addOnFailureListener { showShareStatus("حدث خطأ أثناء قراءة الصورة.") }
+        }.onFailure { showShareStatus("تعذر فتح الصورة.") }
     }
 
     private fun saveImportedContent(title: String, text: String, importMethod: String) {
         val interpretation = HomeworkInterpreter.interpret(title, text)
-        val needsAttention = interpretation.type == UpdateType.HOMEWORK && interpretation.needsFullText
         val item = JSONObject().apply {
-            put("source", "Shared")
-            put("packageName", "")
-            put("title", title)
-            put("text", text)
-            put("bigText", text)
-            put("timestamp", System.currentTimeMillis())
-            put("isNew", true)
-            put("imported", true)
-            put("importMethod", importMethod)
-            put("needsAttention", needsAttention)
-            put("attentionReason", if (needsAttention) "النص المقروء لا يحتوي تفاصيل كافية لفهم المطلوب بدقة." else "")
+            put("source", "Shared"); put("title", title); put("text", text); put("bigText", text)
+            put("timestamp", System.currentTimeMillis()); put("isNew", true); put("imported", true); put("importMethod", importMethod)
+            put("needsAttention", interpretation.type == UpdateType.HOMEWORK && interpretation.needsFullText)
+            put("attentionReason", if (interpretation.needsFullText) "النص لا يحتوي تفاصيل كافية لفهم المطلوب بدقة." else "")
             put("attentionResolved", false)
         }
-        dataFile.appendText(item.toString() + "\n")
+        dataFile.appendText(AgentOrchestrator.enrich(item).toString() + "\n")
     }
 
-    private fun showShareStatus(message: String) {
-        shareStatusText.text = message
-        shareStatusText.visibility = View.VISIBLE
+    private fun showShareStatus(message: String) { shareStatusText.text = message; shareStatusText.visibility = View.VISIBLE }
+
+    private fun readAndUpgradeNotifications(): List<JSONObject> {
+        if (!dataFile.exists()) return emptyList()
+        var changed = false
+        val items = dataFile.readLines().mapNotNull { runCatching { JSONObject(it) }.getOrNull() }.map { item ->
+            if (item.optString("agentPipelineVersion") != "3.1") { changed = true; AgentOrchestrator.enrich(item) } else item
+        }
+        if (changed) writeItems(items)
+        return items
+    }
+
+    private fun markAsReviewed(target: JSONObject) = rewriteTarget(target) { it.put("isNew", false) }
+    private fun resolveAttention(target: JSONObject) = rewriteTarget(target) { it.put("attentionResolved", true); it.put("isNew", false) }
+    private fun rewriteTarget(target: JSONObject, update: (JSONObject) -> Unit) {
+        val updated = readAndUpgradeNotifications().map { item -> if (sameItem(item, target)) update(item); item }
+        writeItems(updated)
+    }
+    private fun writeItems(items: List<JSONObject>) { dataFile.writeText(items.joinToString("\n") { it.toString() } + if (items.isNotEmpty()) "\n" else "") }
+    private fun sameItem(a: JSONObject, b: JSONObject): Boolean {
+        val ae = a.optString("externalId"); val be = b.optString("externalId")
+        if (ae.isNotBlank() && be.isNotBlank()) return ae == be
+        val ak = a.optString("notificationKey"); val bk = b.optString("notificationKey")
+        if (ak.isNotBlank() && bk.isNotBlank()) return ak == bk
+        return a.optLong("timestamp") == b.optLong("timestamp") && a.optString("title") == b.optString("title")
+    }
+
+    private fun updateSyncStatus() {
+        val untis = when {
+            !WebUntisConfigStore.isConfigured(this) -> "WebUntis غير متصل"
+            !WebUntisConfigStore.lastError(this).isNullOrBlank() -> "WebUntis يحتاج مراجعة"
+            WebUntisConfigStore.lastSync(this) > 0 -> "WebUntis محدث ${formatShortTime(WebUntisConfigStore.lastSync(this))}"
+            else -> "WebUntis متصل"
+        }
+        val teams = when {
+            TeamsAuthStore.account(this) != null && TeamsAuthStore.lastSync(this) > 0 -> "Teams محدث ${formatShortTime(TeamsAuthStore.lastSync(this))}"
+            TeamsAuthStore.account(this) != null -> "Teams متصل"
+            else -> "Teams Deep Sync غير متصل"
+        }
+        syncStatusText.text = "$untis • $teams"
+    }
+
+    private fun scheduleSources() {
+        if (WebUntisConfigStore.isConfigured(this)) WebUntisSyncWorker.schedule(this)
+        if (TeamsAuthStore.account(this) != null) TeamsSyncWorker.schedule(this)
     }
 
     private fun openSourceApp(source: String) {
@@ -579,99 +331,20 @@ class MainActivity : AppCompatActivity() {
             source.equals("Untis", true) -> "com.grupet.web.app"
             else -> return
         }
-
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        if (launchIntent != null) {
-            startActivity(launchIntent)
-            return
+        packageManager.getLaunchIntentForPackage(packageName)?.let { startActivity(it); return }
+        if (source.equals("Untis", true)) WebUntisConfigStore.load(this)?.let {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://${it.server}/WebUntis/"))); return
         }
-
-        if (source.equals("Untis", true)) {
-            val config = WebUntisConfigStore.load(this)
-            if (config != null) {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://${config.server}/WebUntis/")))
-                return
-            }
-        }
-        showShareStatus("تطبيق $source غير موجود على الجهاز")
-    }
-
-    private fun readNotifications(): List<JSONObject> {
-        if (!dataFile.exists()) return emptyList()
-        return dataFile.readLines().mapNotNull { line -> runCatching { JSONObject(line) }.getOrNull() }
-    }
-
-    private fun markAsReviewed(target: JSONObject) {
-        rewriteTarget(target) { it.put("isNew", false) }
-    }
-
-    private fun resolveAttention(target: JSONObject) {
-        rewriteTarget(target) {
-            it.put("attentionResolved", true)
-            it.put("isNew", false)
-        }
-    }
-
-    private fun rewriteTarget(target: JSONObject, update: (JSONObject) -> Unit) {
-        val updated = readNotifications().map { item ->
-            if (sameItem(item, target)) update(item)
-            item
-        }
-        dataFile.writeText(updated.joinToString("\n") { it.toString() } + if (updated.isNotEmpty()) "\n" else "")
-    }
-
-    private fun sameItem(a: JSONObject, b: JSONObject): Boolean {
-        val aExternal = a.optString("externalId")
-        val bExternal = b.optString("externalId")
-        if (aExternal.isNotBlank() && bExternal.isNotBlank()) return aExternal == bExternal
-
-        val aKey = a.optString("notificationKey")
-        val bKey = b.optString("notificationKey")
-        if (aKey.isNotBlank() && bKey.isNotBlank()) return aKey == bKey
-
-        return a.optLong("timestamp") == b.optLong("timestamp") &&
-            a.optString("source") == b.optString("source") &&
-            a.optString("title") == b.optString("title")
+        showShareStatus("تطبيق $source غير موجود على الجهاز.")
     }
 
     private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
     }
 
-    private fun typeColor(type: UpdateType): Int = when (type) {
-        UpdateType.HOMEWORK -> Color.rgb(36, 91, 156)
-        UpdateType.DEADLINE_CHANGE -> Color.rgb(194, 89, 25)
-        UpdateType.TIMETABLE_CHANGE -> Color.rgb(112, 70, 156)
-        UpdateType.SCHOOL_MESSAGE -> Color.rgb(44, 118, 81)
-        UpdateType.UNKNOWN -> Color.DKGRAY
-    }
-
-    private fun formatTime(timestamp: Long): String {
-        if (timestamp <= 0L) return ""
-        return SimpleDateFormat("dd/MM/yyyy  hh:mm a", Locale.getDefault()).format(Date(timestamp))
-    }
-
-    private fun formatUntisDate(value: Int): String {
-        return runCatching {
-            val date = LocalDate.parse(value.toString(), DateTimeFormatter.BASIC_ISO_DATE)
-            date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-        }.getOrElse { value.toString() }
-    }
-
-    private fun roundedBackground(color: Int, radius: Int): GradientDrawable = GradientDrawable().apply {
-        setColor(color)
-        cornerRadius = radius.toFloat()
-    }
-
-    private fun outlinedBackground(fill: Int, stroke: Int, radius: Int): GradientDrawable = GradientDrawable().apply {
-        setColor(fill)
-        setStroke(dp(1), stroke)
-        cornerRadius = radius.toFloat()
-    }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    private fun JSONArray.toStringList(): List<String> = buildList { for (i in 0 until length()) optString(i).takeIf { it.isNotBlank() }?.let(::add) }
+    private fun formatTime(timestamp: Long): String = if (timestamp <= 0) "" else SimpleDateFormat("dd/MM/yyyy • hh:mm a", Locale.getDefault()).format(Date(timestamp))
+    private fun formatShortTime(timestamp: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
+    private fun formatUntisDate(value: Int): String = runCatching { LocalDate.parse(value.toString(), DateTimeFormatter.BASIC_ISO_DATE).format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) }.getOrElse { value.toString() }
 }
