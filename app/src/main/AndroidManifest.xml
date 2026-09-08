@@ -20,13 +20,11 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".SourceHubActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".teams.TeamsConnectionActivity"
-            android:exported="false" />
+        <activity android:name=".HomeActivity" android:exported="false" />
+        <activity android:name=".SourceHubActivity" android:exported="false" />
+        <activity android:name=".books.BookLibraryActivity" android:exported="false" />
+        <activity android:name=".learning.StudentWorkCaptureActivity" android:exported="false" />
+        <activity android:name=".teams.TeamsConnectionActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"
@@ -36,7 +34,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
-
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -51,12 +48,17 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="msauth"
-                    android:host="${applicationId}"
-                    android:pathPrefix="/" />
+                <data android:scheme="msauth" android:host="${applicationId}" android:pathPrefix="/" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
 
         <service
             android:name=".notification.SchoolNotificationListener"
