@@ -35,6 +35,29 @@ jobs:
           VERSION_NAME: 0.3.${{ github.run_number }}
         run: gradle :app:assembleDebug --stacktrace
 
+      - name: Print production Android signature hash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+            echo "Production signing secrets unavailable in this workflow context; skipping signature-hash check."
+            exit 0
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n\t ' | base64 --decode > release-signing.jks
+          keytool -exportcert \
+            -alias "$ANDROID_KEY_ALIAS" \
+            -keystore release-signing.jks \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -file release-cert.der
+          python3 - <<'PY'
+          import base64, hashlib
+          cert = open('release-cert.der', 'rb').read()
+          print('RELEASE_SIGNATURE_HASH=' + base64.b64encode(hashlib.sha1(cert).digest()).decode('ascii'))
+          PY
+          rm -f release-signing.jks release-cert.der
+
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4

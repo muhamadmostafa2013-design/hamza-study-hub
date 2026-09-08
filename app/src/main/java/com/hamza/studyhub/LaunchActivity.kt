@@ -33,7 +33,7 @@ class LaunchActivity : AppCompatActivity() {
 
         if (WebUntisConfigStore.isConfigured(this)) {
             WebUntisSyncWorker.schedule(this)
-            openMain()
+            openHub()
             return
         }
 
@@ -111,7 +111,7 @@ class LaunchActivity : AppCompatActivity() {
 
         root.addView(Button(this).apply {
             text = "فتح البرنامج بدون ربط الآن"
-            setOnClickListener { openMain() }
+            setOnClickListener { openHub() }
         })
 
         return root
@@ -158,11 +158,11 @@ class LaunchActivity : AppCompatActivity() {
         statusText.text = "✅ تم ربط ${parsed.server}. جاري أول مزامنة للواجبات..."
         Toast.makeText(this, "تم ربط WebUntis", Toast.LENGTH_SHORT).show()
 
-        statusText.postDelayed({ openMain() }, 900)
+        statusText.postDelayed({ openHub() }, 900)
     }
 
-    private fun openMain() {
-        startActivity(Intent(this, MainActivity::class.java))
+    private fun openHub() {
+        startActivity(Intent(this, SourceHubActivity::class.java))
         finish()
     }
 

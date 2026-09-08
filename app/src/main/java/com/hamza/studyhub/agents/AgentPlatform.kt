@@ -60,6 +60,7 @@ private object IntakeAgent : StudyAgent {
         val importMethod = raw.optString("importMethod")
         val trust = when {
             importMethod.contains("WebUntis", true) -> "OFFICIAL"
+            importMethod.contains("Microsoft Graph", true) -> "OFFICIAL"
             source == "untis" || source == "teams" -> "OFFICIAL_SIGNAL"
             source == "whatsapp" -> "COMMUNITY"
             raw.optBoolean("imported", false) -> "USER_IMPORTED"
@@ -76,6 +77,7 @@ private object IntakeAgent : StudyAgent {
 
     private fun canonicalSource(source: String, method: String): String = when {
         method.contains("WebUntis", true) -> "WEBUNTIS"
+        method.contains("Microsoft Graph", true) -> "TEAMS_GRAPH"
         source == "untis" -> "UNTIS_NOTIFICATION"
         source == "teams" -> "TEAMS_NOTIFICATION"
         source == "whatsapp" -> "WHATSAPP_PARENT"

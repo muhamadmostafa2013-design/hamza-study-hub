@@ -69,4 +69,5 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("com.microsoft.identity.client:msal:8.4.1")
 }
