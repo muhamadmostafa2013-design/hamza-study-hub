@@ -29,6 +29,18 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
+      - name: Run unit + UI button smoke tests
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 0.3.${{ github.run_number }}
+        run: gradle :app:testDebugUnitTest --stacktrace
+
+      - name: Android lint
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 0.3.${{ github.run_number }}
+        run: gradle :app:lintDebug --stacktrace
+
       - name: Build debug APK
         env:
           VERSION_CODE: ${{ github.run_number }}
@@ -57,6 +69,16 @@ jobs:
           print('RELEASE_SIGNATURE_HASH=' + base64.b64encode(hashlib.sha1(cert).digest()).decode('ascii'))
           PY
           rm -f release-signing.jks release-cert.der
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hamza-study-hub-test-reports
+          path: |
+            app/build/reports/tests/
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
 
       - name: Upload APK
         if: success()
