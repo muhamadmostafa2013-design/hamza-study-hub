@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hamza Study Hub</string>
+    <string name="brand_name" translatable="false">HAMZA STUDY HUB</string>
+
+    <string name="metric_new">%1$d\nالجديد</string>
+    <string name="metric_attention">%1$d\nيحتاج انتباه</string>
+    <string name="metric_attempts">%1$d\nالمحاولات</string>
+    <string name="metric_sources">%1$d/2\nمصادر</string>
+    <string name="home_source_summary">%1$s\n%2$s\n%3$d كتب مرجعية</string>
+    <string name="source_sync_summary">%1$s • %2$s</string>
+
+    <string name="untis_sync_requested">جاري طلب مزامنة WebUntis…</string>
+    <string name="qr_reading">جاري قراءة QR…</string>
+    <string name="qr_image_invalid">الصورة لا تحتوي QR صالحًا لـ WebUntis.</string>
+    <string name="qr_read_failed">تعذر قراءة QR من الصورة.</string>
+    <string name="image_open_failed">تعذر فتح الصورة.</string>
+    <string name="qr_invalid">QR غير صالح. يجب أن يبدأ بـ untis://setschool</string>
+    <string name="untis_connected_first_sync">تم ربط %1$s. جاري أول مزامنة…</string>
+</resources>
