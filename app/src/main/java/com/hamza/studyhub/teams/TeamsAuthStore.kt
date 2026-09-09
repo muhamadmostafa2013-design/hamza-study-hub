@@ -22,19 +22,24 @@ object TeamsAuthStore {
     private const val KEY_LAST_ERROR = "last_error"
     private const val KEY_ACCOUNT = "account"
 
+    // Public Entra application metadata. These values are not credentials or secrets.
+    private const val DEFAULT_CLIENT_ID = "0a95569d-2b7a-45c3-a527-a3ae5ba7c258"
+    private const val SCHOOL_TENANT_ID = "852d10e9-eca3-45a4-82d0-36bce5a62b27"
+
     fun saveClientId(context: Context, clientId: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
             putString(KEY_CLIENT_ID, clientId.trim())
         }
     }
 
-    fun clientId(context: Context): String? =
+    fun clientId(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_CLIENT_ID, null)
             ?.trim()
             ?.takeIf { it.isNotBlank() }
+            ?: DEFAULT_CLIENT_ID
 
-    fun isConfigured(context: Context): Boolean = clientId(context) != null
+    fun isConfigured(context: Context): Boolean = clientId(context).isNotBlank()
 
     fun saveAccount(context: Context, username: String?) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
@@ -81,13 +86,12 @@ object TeamsAuthStore {
         "msauth://${context.packageName}/${Uri.encode(signatureHash(context))}"
 
     /**
-     * Builds MSAL JSON dynamically so Hamza Study Hub never needs a secret in the APK.
-     * The client ID is public app metadata and can be pasted once from Entra App Registration.
+     * Builds an MSAL public-client configuration for the Beverly Hills Schools tenant.
+     * No password, client secret, access token, or refresh token is written by this code.
      */
     fun buildMsalConfigFile(context: Context): File {
-        val clientId = requireNotNull(clientId(context)) { "Teams client ID is not configured" }
         val config = JSONObject().apply {
-            put("client_id", clientId)
+            put("client_id", clientId(context))
             put("authorization_user_agent", "BROWSER")
             put("redirect_uri", redirectUri(context))
             put("account_mode", "SINGLE")
@@ -96,7 +100,8 @@ object TeamsAuthStore {
                 put("type", "AAD")
                 put("default", true)
                 put("audience", JSONObject().apply {
-                    put("type", "AzureADMultipleOrgs")
+                    put("type", "AzureADMyOrg")
+                    put("tenant_id", SCHOOL_TENANT_ID)
                 })
             }))
             put("logging", JSONObject().apply {
