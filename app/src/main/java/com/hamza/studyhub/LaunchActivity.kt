@@ -84,24 +84,27 @@ class LaunchActivity : AppCompatActivity() {
     }
 
     private fun readQrFromImage(uri: Uri) {
-        statusText.text = "جاري قراءة QR…"
+        statusText.text = getString(R.string.qr_reading)
         runCatching { InputImage.fromFilePath(this, uri) }
             .onSuccess { image -> BarcodeScanning.getClient().process(image)
                 .addOnSuccessListener { barcodes ->
                     val qr = barcodes.mapNotNull { it.rawValue }.firstOrNull { it.startsWith("untis://setschool", ignoreCase = true) }
-                    if (qr == null) statusText.text = "الصورة لا تحتوي QR صالحًا لـ WebUntis."
+                    if (qr == null) statusText.text = getString(R.string.qr_image_invalid)
                     else { qrText.setText(qr); connectQr(qr) }
                 }
-                .addOnFailureListener { statusText.text = "تعذر قراءة QR من الصورة." } }
-            .onFailure { statusText.text = "تعذر فتح الصورة." }
+                .addOnFailureListener { statusText.text = getString(R.string.qr_read_failed) } }
+            .onFailure { statusText.text = getString(R.string.image_open_failed) }
     }
 
     private fun connectQr(raw: String) {
         val parsed = WebUntisConfigStore.parseQr(raw)
-        if (parsed == null) { statusText.text = "QR غير صالح. يجب أن يبدأ بـ untis://setschool"; return }
+        if (parsed == null) {
+            statusText.text = getString(R.string.qr_invalid)
+            return
+        }
         WebUntisConfigStore.save(this, raw)
         WebUntisSyncWorker.schedule(this)
-        statusText.text = "تم ربط ${parsed.server}. جاري أول مزامنة…"
+        statusText.text = getString(R.string.untis_connected_first_sync, parsed.server)
         Toast.makeText(this, "تم ربط WebUntis", Toast.LENGTH_SHORT).show()
         statusText.postDelayed({ openHome() }, 800)
     }
