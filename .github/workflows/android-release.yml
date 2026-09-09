@@ -4,12 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: Version name, e.g. 0.3.0
+        description: Version name, e.g. 0.4.0
         required: true
-        default: 0.3.0
+        default: 0.4.0
   push:
     tags:
       - 'v*'
+    branches:
+      - 'release/**'
 
 permissions:
   contents: write
@@ -36,6 +38,22 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
+      - name: Resolve version metadata
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION_NAME="${{ inputs.version_name }}"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION_NAME="${GITHUB_REF_NAME#v}"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            VERSION_NAME="${GITHUB_REF_NAME#release/}"
+          else
+            VERSION_NAME="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "Building Hamza Study Hub $VERSION_NAME ($GITHUB_RUN_NUMBER)"
+
       - name: Restore release keystore
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -60,8 +78,6 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          VERSION_CODE: ${{ github.run_number }}
-          VERSION_NAME: ${{ inputs.version_name || github.ref_name }}
         run: gradle :app:assembleRelease --stacktrace
 
       - name: Verify signed APK exists
