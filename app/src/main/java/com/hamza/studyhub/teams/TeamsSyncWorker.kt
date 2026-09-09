@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.hamza.studyhub.monitor.BackgroundAlert
 import java.util.concurrent.TimeUnit
 
 /**
@@ -28,12 +29,27 @@ class TeamsSyncWorker(
             val token = TeamsAuthManager.acquireTokenSilently(applicationContext)
                 ?: return Result.success()
 
-            TeamsDeepSyncEngine(
+            val summary = TeamsDeepSyncEngine(
                 applicationContext,
                 TeamsGraphClient(token)
             ).sync()
 
             TeamsAuthStore.saveSyncSuccess(applicationContext)
+
+            if (summary.discovered > 0 || summary.updated > 0) {
+                val parts = buildList {
+                    if (summary.discovered > 0) add("${summary.discovered} واجب جديد")
+                    if (summary.updated > 0) add("${summary.updated} تعديل")
+                    if (summary.attention > 0) add("${summary.attention} يحتاج انتباه")
+                }
+                BackgroundAlert.notify(
+                    applicationContext,
+                    "Hamza Study Hub • تحديث من Teams",
+                    parts.joinToString(" • "),
+                    4201
+                )
+            }
+
             Result.success()
         } catch (e: Exception) {
             TeamsAuthStore.saveSyncError(
