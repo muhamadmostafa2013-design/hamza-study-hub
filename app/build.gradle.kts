@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "com.hamza.studyhub"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = (System.getenv("VERSION_CODE") ?: "300").toInt()
         versionName = System.getenv("VERSION_NAME") ?: "0.3.0"
     }
@@ -49,6 +49,10 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -62,11 +66,17 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.core:core-splashscreen:1.2.0")
     implementation("androidx.appcompat:appcompat:1.8.0")
-    implementation("androidx.activity:activity-ktx:1.12.2")
-    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.activity:activity-ktx:1.13.0")
+    implementation("com.google.android.material:material:1.14.0")
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("com.microsoft.identity.client:msal:8.4.2")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("androidx.test:core:1.7.0")
 }

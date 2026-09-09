@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.HamzaStudyHub" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#18365B</item>
+        <item name="colorPrimaryVariant">#102846</item>
+        <item name="colorSecondary">#2563A9</item>
         <item name="android:fontFamily">sans</item>
+        <item name="android:statusBarColor">#18365B</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:navigationBarColor">#0E1726</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+
+    <style name="Theme.HamzaStudyHub.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#18365B</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.HamzaStudyHub</item>
     </style>
 </resources>

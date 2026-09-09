@@ -2,7 +2,7 @@ name: Android CI
 
 on:
   push:
-    branches: [main, m1-notification-capture, m2-stable-agents-release]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -13,10 +13,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -29,11 +29,56 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
+      - name: Run unit + UI button smoke tests
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 0.3.${{ github.run_number }}
+        run: gradle :app:testDebugUnitTest --stacktrace
+
+      - name: Android lint
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 0.3.${{ github.run_number }}
+        run: gradle :app:lintDebug --stacktrace
+
       - name: Build debug APK
         env:
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: 0.3.${{ github.run_number }}
         run: gradle :app:assembleDebug --stacktrace
+
+      - name: Print production Android signature hash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+            echo "Production signing secrets unavailable in this workflow context; skipping signature-hash check."
+            exit 0
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n\t ' | base64 --decode > release-signing.jks
+          keytool -exportcert \
+            -alias "$ANDROID_KEY_ALIAS" \
+            -keystore release-signing.jks \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -file release-cert.der
+          python3 - <<'PY'
+          import base64, hashlib
+          cert = open('release-cert.der', 'rb').read()
+          print('RELEASE_SIGNATURE_HASH=' + base64.b64encode(hashlib.sha1(cert).digest()).decode('ascii'))
+          PY
+          rm -f release-signing.jks release-cert.der
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hamza-study-hub-test-reports
+          path: |
+            app/build/reports/tests/
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
 
       - name: Upload APK
         if: success()
