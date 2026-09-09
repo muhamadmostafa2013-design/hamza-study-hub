@@ -2,9 +2,10 @@ package com.hamza.studyhub.teams
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.util.Base64
-import android.net.Uri
+import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -22,10 +23,9 @@ object TeamsAuthStore {
     private const val KEY_ACCOUNT = "account"
 
     fun saveClientId(context: Context, clientId: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_CLIENT_ID, clientId.trim())
-            .apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putString(KEY_CLIENT_ID, clientId.trim())
+        }
     }
 
     fun clientId(context: Context): String? =
@@ -37,10 +37,9 @@ object TeamsAuthStore {
     fun isConfigured(context: Context): Boolean = clientId(context) != null
 
     fun saveAccount(context: Context, username: String?) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_ACCOUNT, username.orEmpty())
-            .apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putString(KEY_ACCOUNT, username.orEmpty())
+        }
     }
 
     fun account(context: Context): String? =
@@ -49,18 +48,16 @@ object TeamsAuthStore {
             ?.takeIf { !it.isNullOrBlank() }
 
     fun saveSyncSuccess(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putLong(KEY_LAST_SYNC, System.currentTimeMillis())
-            .remove(KEY_LAST_ERROR)
-            .apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putLong(KEY_LAST_SYNC, System.currentTimeMillis())
+            remove(KEY_LAST_ERROR)
+        }
     }
 
     fun saveSyncError(context: Context, message: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_LAST_ERROR, message.take(300))
-            .apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putString(KEY_LAST_ERROR, message.take(300))
+        }
     }
 
     fun lastSync(context: Context): Long =
