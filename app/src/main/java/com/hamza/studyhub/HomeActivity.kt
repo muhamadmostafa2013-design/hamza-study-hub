@@ -57,7 +57,7 @@ class HomeActivity : AppCompatActivity() {
         }
         val heroBody = HamzaUi.cardContent(hero)
         heroBody.addView(TextView(this).apply {
-            text = "HAMZA STUDY HUB"
+            text = getString(R.string.brand_name)
             textSize = 12.5f
             letterSpacing = 0.08f
             setTypeface(typeface, Typeface.BOLD)
@@ -124,9 +124,9 @@ class HomeActivity : AppCompatActivity() {
         val newCount = items.count { it.optBoolean("isNew", true) }
         val attention = items.filter { it.optBoolean("needsAttention", false) && !it.optBoolean("attentionResolved", false) }
         val attempts = LearningEvidenceStore(this).attempts().size
-        newMetric.text = "$newCount\nالجديد"
-        attentionMetric.text = "${attention.size}\nيحتاج انتباه"
-        attemptsMetric.text = "$attempts\nالمحاولات"
+        newMetric.text = getString(R.string.metric_new, newCount)
+        attentionMetric.text = getString(R.string.metric_attention, attention.size)
+        attemptsMetric.text = getString(R.string.metric_attempts, attempts)
 
         val top = attention.firstOrNull() ?: items.firstOrNull { it.optBoolean("isNew", true) }
         priorityText.text = when {
@@ -142,8 +142,8 @@ class HomeActivity : AppCompatActivity() {
         val teams = TeamsAuthStore.account(this)?.let { account ->
             val last = TeamsAuthStore.lastSync(this)
             if (last > 0) "Teams متصل • ${formatTime(last)}" else "Teams متصل بالحساب"
-        } ?: if (TeamsAuthStore.isConfigured(this)) "Teams جاهز لتسجيل الدخول" else "Teams Deep Sync غير متصل"
-        sourceText.text = "$untis\n$teams\n${BookLibraryStore(this).allBooks().size} كتب مرجعية"
+        } ?: "Teams جاهز لتسجيل الدخول"
+        sourceText.text = getString(R.string.home_source_summary, untis, teams, BookLibraryStore(this).allBooks().size)
     }
 
     private fun scheduleConnectedSources() {
