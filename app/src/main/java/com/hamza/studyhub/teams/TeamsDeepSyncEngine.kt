@@ -30,7 +30,9 @@ class TeamsDeepSyncEngine(
     fun sync(): SyncSummary {
         val dataFile = File(context.filesDir, "school_notifications.jsonl")
         val existing = if (dataFile.exists()) {
-            dataFile.readLines().mapNotNull { line -> runCatching { JSONObject(line) }.getOrNull() }.toMutableList()
+            dataFile.readLines().mapNotNull { line ->
+                runCatching { JSONObject(line) }.getOrNull()
+            }.toMutableList()
         } else {
             mutableListOf()
         }
@@ -55,7 +57,9 @@ class TeamsDeepSyncEngine(
 
             if (!changed && old != null) {
                 unchanged++
-                if (old.optBoolean("needsAttention", false) && !old.optBoolean("attentionResolved", false)) attention++
+                if (old.optBoolean("needsAttention", false) && !old.optBoolean("attentionResolved", false)) {
+                    attention++
+                }
                 return@forEach
             }
 
@@ -65,16 +69,17 @@ class TeamsDeepSyncEngine(
             val daysUntilDue = dueDate?.let { ChronoUnit.DAYS.between(today, it) }
             val missingInstructions = detail.instructionsHtml.isNullOrBlank() && detail.resourceLabels.isEmpty()
 
+            // New/updated is represented by syncChange + isNew. "Needs attention" is reserved
+            // for something a parent should actually act on, so the dashboard stays meaningful.
             val reason = when {
                 missingInstructions -> "Teams سجّل الواجب لكن التعليمات/المرفقات غير ظاهرة في Graph؛ يحتاج فتح المصدر."
                 daysUntilDue != null && daysUntilDue < 0 -> "الواجب متأخر عن موعد التسليم."
                 daysUntilDue != null && daysUntilDue <= 1 -> "موعد تسليم واجب Teams قريب جدًا."
-                old == null -> "واجب Teams تم اكتشافه بالمزامنة العميقة حتى لو لم يصل إشعار."
-                else -> "تم تعديل واجب Teams منذ آخر مزامنة."
+                else -> ""
             }
             val needsAttention = reason.isNotBlank()
             val previousResolved = old?.optBoolean("attentionResolved", false) ?: false
-            val attentionResolved = if (changed) false else previousResolved
+            val attentionResolved = if (changed && needsAttention) false else previousResolved
 
             val raw = JSONObject().apply {
                 put("source", "Teams")
@@ -114,7 +119,9 @@ class TeamsDeepSyncEngine(
             }
         }
 
-        dataFile.writeText(existing.joinToString("\n") { it.toString() } + if (existing.isNotEmpty()) "\n" else "")
+        dataFile.writeText(
+            existing.joinToString("\n") { it.toString() } + if (existing.isNotEmpty()) "\n" else ""
+        )
         return SyncSummary(discovered, updated, unchanged, attention)
     }
 
