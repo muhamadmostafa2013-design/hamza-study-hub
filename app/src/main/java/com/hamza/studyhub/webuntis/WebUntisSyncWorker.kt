@@ -124,18 +124,19 @@ class WebUntisSyncWorker(
             val dueDate = parseUntisDate(hw.dueDate)
             val daysUntilDue = dueDate?.let { ChronoUnit.DAYS.between(today, it) }
             val missingDetails = hw.text.isBlank() && hw.remark.isBlank()
+
+            // New/updated is already shown with syncChange and isNew. Needs Attention is reserved
+            // for something the parent should act on, not merely for every newly discovered item.
             val attentionReason = when {
                 hw.completed -> ""
                 missingDetails -> "تفاصيل الواجب غير موجودة في WebUntis؛ افتح المصدر لو احتجنا المطلوب كاملًا."
                 daysUntilDue != null && daysUntilDue < 0 -> "الواجب متأخر عن موعد التسليم."
                 daysUntilDue != null && daysUntilDue <= 1 -> "موعد التسليم قريب جدًا."
-                syncChange == "new" -> "واجب جديد تم اكتشافه تلقائيًا من WebUntis."
-                syncChange == "updated" -> "تم تعديل هذا الواجب على WebUntis."
                 else -> ""
             }
             val needsAttention = attentionReason.isNotBlank()
             val previousResolved = previous?.optBoolean("attentionResolved", false) ?: false
-            val attentionResolved = if (isChanged) false else previousResolved
+            val attentionResolved = if (isChanged && needsAttention) false else previousResolved
 
             val rawItem = JSONObject().apply {
                 put("source", "Untis")
