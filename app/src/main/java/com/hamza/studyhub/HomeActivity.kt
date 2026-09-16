@@ -11,6 +11,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.hamza.studyhub.agents.SchoolFeedProjector
 import com.hamza.studyhub.agents.StudySupervisorAgent
 import com.hamza.studyhub.books.BookLibraryActivity
 import com.hamza.studyhub.books.BookLibraryStore
@@ -104,7 +105,7 @@ class HomeActivity : AppCompatActivity() {
             setOnClickListener { showStudySupervisor(force = true) }
         }, HamzaUi.marginTop(this, 9))
         content.addView(HamzaUi.subtitle(this,
-            "الوكيل يرتب فقط ما هو موجود في المصادر والمحاولات المحفوظة. لا يغيّر واجبات المدرسة ولا يخمّن موعدًا غير موجود."),
+            "الوكيل يرتب فقط العمل الحالي من المصادر والمحاولات المحفوظة. السجل القديم يظل محفوظًا لكنه لا يزاحم أولويات اليوم."),
             HamzaUi.marginTop(this, 7))
 
         content.addView(HamzaUi.section(this, "الوصول السريع"))
@@ -134,14 +135,14 @@ class HomeActivity : AppCompatActivity() {
 
     private fun refresh() {
         val items = readFeed().sortedByDescending { it.optLong("timestamp") }
-        val newCount = items.count { it.optBoolean("isNew", true) }
+        val newCount = items.count { it.optBoolean("isNew", false) }
         val attention = items.filter { it.optBoolean("needsAttention", false) && !it.optBoolean("attentionResolved", false) }
         val attempts = LearningEvidenceStore(this).attempts()
         newMetric.text = getString(R.string.metric_new, newCount)
         attentionMetric.text = getString(R.string.metric_attention, attention.size)
         attemptsMetric.text = getString(R.string.metric_attempts, attempts.size)
 
-        val top = attention.firstOrNull() ?: items.firstOrNull { it.optBoolean("isNew", true) }
+        val top = attention.firstOrNull() ?: items.firstOrNull { it.optBoolean("isNew", false) } ?: items.firstOrNull()
         priorityText.text = when {
             top == null -> "كل شيء هادئ حاليًا. لا يوجد تحديث يحتاج تدخل منك."
             attention.isNotEmpty() -> "يحتاج انتباه الآن\n${top.optString("title").ifBlank { "تحديث مدرسي" }}\n${top.optString("attentionReason").take(150)}"
@@ -218,7 +219,8 @@ class HomeActivity : AppCompatActivity() {
     private fun readFeed(): List<JSONObject> {
         val file = File(filesDir, "school_notifications.jsonl")
         if (!file.exists()) return emptyList()
-        return file.readLines().mapNotNull { runCatching { JSONObject(it) }.getOrNull() }
+        val raw = file.readLines().mapNotNull { runCatching { JSONObject(it) }.getOrNull() }
+        return SchoolFeedProjector.current(raw)
     }
 
     private fun formatTime(timestamp: Long): String = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(timestamp))
