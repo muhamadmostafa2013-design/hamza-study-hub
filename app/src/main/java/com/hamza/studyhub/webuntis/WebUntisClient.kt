@@ -11,246 +11,141 @@ import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-/**
- * Minimal WebUntis homework client.
- *
- * It uses the QR-generated user + shared secret that WebUntis itself provides to
- * mobile clients. The app generates the 30-second OTP locally, opens a short-lived
- * WebUntis session, reads homework, then discards the session.
- *
- * No password or QR secret is sent to Hamza Study Hub's GitHub repo or any third
- * party server; authentication goes directly from the phone to the configured
- * WebUntis school server.
- */
+/** WebUntis client used directly from Hamza's phone. */
 class WebUntisClient(private val config: WebUntisConfig) {
 
     data class Homework(
-        val id: Long,
-        val lessonId: Long,
-        val assignedDate: Int,
-        val dueDate: Int,
-        val text: String,
-        val remark: String,
-        val completed: Boolean,
-        val subject: String,
-        val teacher: String
+        val id: Long, val lessonId: Long, val assignedDate: Int, val dueDate: Int,
+        val text: String, val remark: String, val completed: Boolean,
+        val subject: String, val teacher: String
     )
 
-    private data class Session(
-        val jsessionId: String,
-        val schoolNameCookie: String
-    ) {
-        val cookieHeader: String
-            get() = "JSESSIONID=$jsessionId; schoolname=$schoolNameCookie"
+    data class TimetableEntry(
+        val id: Long,
+        val date: Int,
+        val startTime: Int,
+        val endTime: Int,
+        val subject: String,
+        val teacher: String,
+        val room: String,
+        val cancelled: Boolean,
+        val substitutionText: String
+    )
+
+    private data class Session(val jsessionId: String, val schoolNameCookie: String) {
+        val cookieHeader: String get() = "JSESSIONID=$jsessionId; schoolname=$schoolNameCookie"
     }
 
     fun fetchHomeworks(start: LocalDate, end: LocalDate): List<Homework> {
         val session = loginWithQrSecret()
         val formatter = DateTimeFormatter.BASIC_ISO_DATE
-        val endpoint = buildString {
-            append(serverBase())
-            append("WebUntis/api/homeworks/lessons")
-            append("?startDate=${start.format(formatter)}")
-            append("&endDate=${end.format(formatter)}")
-        }
+        val endpoint = "${serverBase()}WebUntis/api/homeworks/lessons?startDate=${start.format(formatter)}&endDate=${end.format(formatter)}"
+        return parseHomeworkResponse(getJson(endpoint, session))
+    }
 
-        val root = getJson(endpoint, session)
-        return parseHomeworkResponse(root)
+    /** Reads the logged-in student's timetable through the same internal mobile API session. */
+    fun fetchOwnTimetable(start: LocalDate, end: LocalDate): List<TimetableEntry> {
+        val session = loginWithQrSecret()
+        val formatter = DateTimeFormatter.BASIC_ISO_DATE
+        val userData = fetchUserData(session)
+        val personId = userData.optLong("personId", userData.optLong("id", Long.MIN_VALUE))
+        val personType = userData.optInt("personType", 5)
+        if (personId == Long.MIN_VALUE) throw IllegalStateException("WebUntis لم يرجع هوية الطالب")
+
+        val endpoint = "${serverBase()}WebUntis/jsonrpc.do?school=${URLEncoder.encode(config.school, StandardCharsets.UTF_8.name())}"
+        val params = JSONObject()
+            .put("id", personId)
+            .put("type", personType)
+            .put("startDate", start.format(formatter).toInt())
+            .put("endDate", end.format(formatter).toInt())
+            .put("options", JSONObject()
+                .put("element", JSONObject().put("id", personId).put("type", personType))
+                .put("showLsText", true)
+                .put("showSubstText", true)
+                .put("showInfo", true)
+                .put("klasseFields", JSONArray().put("id").put("name").put("longname"))
+                .put("roomFields", JSONArray().put("id").put("name").put("longname"))
+                .put("subjectFields", JSONArray().put("id").put("name").put("longname"))
+                .put("teacherFields", JSONArray().put("id").put("name").put("longname")))
+
+        val body = JSONObject().put("id", "HamzaStudyHubTimetable")
+            .put("method", "getTimetable")
+            .put("params", params)
+            .put("jsonrpc", "2.0")
+        val root = postJson(endpoint, body, session)
+        val array = root.optJSONArray("result") ?: JSONArray()
+        return (0 until array.length()).mapNotNull { i ->
+            val p = array.optJSONObject(i) ?: return@mapNotNull null
+            TimetableEntry(
+                id = p.optLong("id", Long.MIN_VALUE), date = p.optInt("date", 0),
+                startTime = p.optInt("startTime", 0), endTime = p.optInt("endTime", 0),
+                subject = firstElementName(p.optJSONArray("su")),
+                teacher = firstElementName(p.optJSONArray("te")),
+                room = firstElementName(p.optJSONArray("ro")),
+                cancelled = p.optString("code").equals("cancelled", true) || p.optBoolean("cancelled", false),
+                substitutionText = p.optString("substText").ifBlank { p.optString("info") }
+            )
+        }.sortedWith(compareBy<TimetableEntry> { it.date }.thenBy { it.startTime })
+    }
+
+    private fun fetchUserData(session: Session): JSONObject {
+        val endpoint = "${serverBase()}WebUntis/api/rest/view/v1/app/data"
+        val root = runCatching { getJson(endpoint, session) }.getOrNull()
+        val user = root?.optJSONObject("user") ?: root?.optJSONObject("data")?.optJSONObject("user")
+        if (user != null) return user
+        throw IllegalStateException("تعذر قراءة بيانات الطالب من WebUntis")
+    }
+
+    private fun firstElementName(array: JSONArray?): String {
+        val item = array?.optJSONObject(0) ?: return ""
+        return item.optString("longname").ifBlank { item.optString("name") }.trim()
     }
 
     private fun loginWithQrSecret(): Session {
         val now = System.currentTimeMillis()
-        val otp = Totp.generate(config.secret, now).toIntOrNull()
-            ?: throw IllegalStateException("تعذر إنشاء رمز WebUntis المؤقت")
-
+        val otp = Totp.generate(config.secret, now).toIntOrNull() ?: error("تعذر إنشاء رمز WebUntis المؤقت")
         val school = URLEncoder.encode(config.school, StandardCharsets.UTF_8.name())
         val endpoint = "${serverBase()}WebUntis/jsonrpc_intern.do?school=$school"
-
-        val auth = JSONObject()
-            .put("user", config.user)
-            .put("otp", otp)
-            .put("clientTime", now)
-
-        val requestBody = JSONObject()
-            .put("id", "HamzaStudyHub")
-            .put("method", "getUserData2017")
-            .put("params", JSONArray().put(JSONObject().put("auth", auth)))
-            .put("jsonrpc", "2.0")
-
-        val connection = openConnection(endpoint).apply {
-            requestMethod = "POST"
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-        }
-
-        connection.outputStream.use { output ->
-            output.write(requestBody.toString().toByteArray(StandardCharsets.UTF_8))
-        }
-
-        val responseText = readResponse(connection)
-        val response = JSONObject(responseText)
-        response.optJSONObject("error")?.let { error ->
-            throw IllegalStateException(
-                error.optString("message").ifBlank { "تعذر تسجيل الدخول إلى WebUntis" }
-            )
-        }
-
-        val cookieValues = connection.headerFields
-            .filterKeys { it?.equals("Set-Cookie", ignoreCase = true) == true }
-            .values
-            .flatten()
-
-        val jsession = extractCookie(cookieValues, "JSESSIONID")
-            ?: throw IllegalStateException("WebUntis لم يرجع جلسة تسجيل دخول")
-        val schoolCookie = extractCookie(cookieValues, "schoolname")
-            ?: throw IllegalStateException("WebUntis لم يرجع schoolname للجلسة")
-
-        connection.disconnect()
-        return Session(jsession, schoolCookie)
+        val auth = JSONObject().put("user", config.user).put("otp", otp).put("clientTime", now)
+        val requestBody = JSONObject().put("id", "HamzaStudyHub").put("method", "getUserData2017")
+            .put("params", JSONArray().put(JSONObject().put("auth", auth))).put("jsonrpc", "2.0")
+        val connection = openConnection(endpoint).apply { requestMethod = "POST"; doOutput = true; setRequestProperty("Content-Type", "application/json") }
+        connection.outputStream.use { it.write(requestBody.toString().toByteArray(StandardCharsets.UTF_8)) }
+        val response = JSONObject(readResponse(connection))
+        response.optJSONObject("error")?.let { error(it.optString("message").ifBlank { "تعذر تسجيل الدخول إلى WebUntis" }) }
+        val cookies = connection.headerFields.filterKeys { it?.equals("Set-Cookie", true) == true }.values.flatten()
+        val session = Session(extractCookie(cookies, "JSESSIONID") ?: error("WebUntis لم يرجع جلسة تسجيل دخول"), extractCookie(cookies, "schoolname") ?: error("WebUntis لم يرجع schoolname للجلسة"))
+        connection.disconnect(); return session
     }
 
     private fun getJson(endpoint: String, session: Session): JSONObject {
-        val connection = openConnection(endpoint).apply {
-            requestMethod = "GET"
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Cookie", session.cookieHeader)
-        }
+        val c = openConnection(endpoint).apply { requestMethod = "GET"; setRequestProperty("Cookie", session.cookieHeader) }
+        val text = readResponse(c); c.disconnect(); return JSONObject(text)
+    }
 
-        val text = readResponse(connection)
-        connection.disconnect()
-        val root = JSONObject(text)
-
-        root.optJSONObject("error")?.let { error ->
-            throw IllegalStateException(
-                error.optString("message").ifBlank { "WebUntis رجع خطأ أثناء قراءة الواجبات" }
-            )
-        }
-
-        return root
+    private fun postJson(endpoint: String, body: JSONObject, session: Session): JSONObject {
+        val c = openConnection(endpoint).apply { requestMethod = "POST"; doOutput = true; setRequestProperty("Content-Type", "application/json"); setRequestProperty("Cookie", session.cookieHeader) }
+        c.outputStream.use { it.write(body.toString().toByteArray(StandardCharsets.UTF_8)) }
+        val text = readResponse(c); c.disconnect(); return JSONObject(text).also { root -> root.optJSONObject("error")?.let { error(it.optString("message")) } }
     }
 
     private fun parseHomeworkResponse(root: JSONObject): List<Homework> {
         val data = root.optJSONObject("data") ?: root
-        val homeworks = data.optJSONArray("homeworks") ?: JSONArray()
-        val lessons = data.optJSONArray("lessons") ?: JSONArray()
-        val records = data.optJSONArray("records") ?: JSONArray()
-        val teachers = data.optJSONArray("teachers") ?: JSONArray()
-
-        val lessonsById = mutableMapOf<Long, JSONObject>()
-        for (i in 0 until lessons.length()) {
-            val lesson = lessons.optJSONObject(i) ?: continue
-            lessonsById[lesson.optLong("id", Long.MIN_VALUE)] = lesson
-        }
-
-        val teachersById = mutableMapOf<Long, JSONObject>()
-        for (i in 0 until teachers.length()) {
-            val teacher = teachers.optJSONObject(i) ?: continue
-            teachersById[teacher.optLong("id", Long.MIN_VALUE)] = teacher
-        }
-
-        val teacherByHomeworkId = mutableMapOf<Long, Long>()
-        for (i in 0 until records.length()) {
-            val record = records.optJSONObject(i) ?: continue
-            val homeworkId = record.optLong("homeworkId", Long.MIN_VALUE)
-            val teacherId = record.optLong("teacherId", Long.MIN_VALUE)
-            if (homeworkId != Long.MIN_VALUE && teacherId != Long.MIN_VALUE) {
-                teacherByHomeworkId[homeworkId] = teacherId
-            }
-        }
-
-        val result = mutableListOf<Homework>()
-        for (i in 0 until homeworks.length()) {
-            val hw = homeworks.optJSONObject(i) ?: continue
-            val id = hw.optLong("id", Long.MIN_VALUE)
-            if (id == Long.MIN_VALUE) continue
-
-            val lessonId = hw.optLong("lessonId", Long.MIN_VALUE)
-            val lesson = lessonsById[lessonId]
-            val teacher = teacherByHomeworkId[id]?.let { teachersById[it] }
-
-            result += Homework(
-                id = id,
-                lessonId = lessonId,
-                assignedDate = hw.optInt("date", 0),
-                dueDate = hw.optInt("dueDate", 0),
-                text = hw.optString("text").trim(),
-                remark = hw.optString("remark").trim(),
-                completed = hw.optBoolean("completed", false),
-                subject = extractSubject(lesson),
-                teacher = extractTeacher(teacher)
-            )
-        }
-
-        return result
-    }
-
-    private fun extractSubject(lesson: JSONObject?): String {
-        lesson ?: return ""
-        val raw = lesson.opt("subject")
-        if (raw is String && raw.isNotBlank()) return raw
-        if (raw is JSONObject) {
-            raw.optString("longName").takeIf { it.isNotBlank() }?.let { return it }
-            raw.optString("name").takeIf { it.isNotBlank() }?.let { return it }
-        }
-        listOf("subjectName", "subjectLongName").forEach { key ->
-            lesson.optString(key).takeIf { it.isNotBlank() }?.let { return it }
-        }
-        return ""
-    }
-
-    private fun extractTeacher(teacher: JSONObject?): String {
-        teacher ?: return ""
-        listOf("longName", "displayName", "name").forEach { key ->
-            teacher.optString(key).takeIf { it.isNotBlank() }?.let { return it }
-        }
-        return ""
-    }
-
-    private fun serverBase(): String {
-        val clean = config.server
-            .removePrefix("https://")
-            .removePrefix("http://")
-            .trim('/')
-        return "https://$clean/"
-    }
-
-    private fun openConnection(endpoint: String): HttpURLConnection {
-        return (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 15_000
-            readTimeout = 20_000
-            instanceFollowRedirects = true
-            setRequestProperty(
-                "User-Agent",
-                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36 HamzaStudyHub/0.2"
-            )
-            setRequestProperty("Accept", "application/json, text/plain, */*")
+        val homeworks = data.optJSONArray("homeworks") ?: JSONArray(); val lessons = data.optJSONArray("lessons") ?: JSONArray(); val records = data.optJSONArray("records") ?: JSONArray(); val teachers = data.optJSONArray("teachers") ?: JSONArray()
+        val lessonsById = (0 until lessons.length()).mapNotNull { lessons.optJSONObject(it) }.associateBy { it.optLong("id") }
+        val teachersById = (0 until teachers.length()).mapNotNull { teachers.optJSONObject(it) }.associateBy { it.optLong("id") }
+        val teacherByHomework = mutableMapOf<Long, Long>(); for (i in 0 until records.length()) records.optJSONObject(i)?.let { teacherByHomework[it.optLong("homeworkId")] = it.optLong("teacherId") }
+        return (0 until homeworks.length()).mapNotNull { i ->
+            val hw = homeworks.optJSONObject(i) ?: return@mapNotNull null; val id = hw.optLong("id", Long.MIN_VALUE); if (id == Long.MIN_VALUE) return@mapNotNull null
+            val lessonId = hw.optLong("lessonId", Long.MIN_VALUE); val lesson = lessonsById[lessonId]; val teacher = teacherByHomework[id]?.let { teachersById[it] }
+            Homework(id, lessonId, hw.optInt("date"), hw.optInt("dueDate"), hw.optString("text").trim(), hw.optString("remark").trim(), hw.optBoolean("completed"), extractSubject(lesson), extractTeacher(teacher))
         }
     }
 
-    private fun readResponse(connection: HttpURLConnection): String {
-        val code = connection.responseCode
-        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-        val body = if (stream == null) {
-            ""
-        } else {
-            BufferedReader(InputStreamReader(stream, StandardCharsets.UTF_8)).use { it.readText() }
-        }
-
-        if (code !in 200..299) {
-            throw IllegalStateException("WebUntis HTTP $code: ${body.take(250)}")
-        }
-        return body
-    }
-
-    private fun extractCookie(headers: List<String>, name: String): String? {
-        val prefix = "$name="
-        return headers.asSequence()
-            .flatMap { header -> header.split(';').asSequence() }
-            .map { it.trim() }
-            .firstOrNull { it.startsWith(prefix, ignoreCase = true) }
-            ?.substringAfter('=')
-            ?.trim()
-            ?.trim('"')
-            ?.takeIf { it.isNotBlank() }
-    }
+    private fun extractSubject(o: JSONObject?): String { o ?: return ""; val raw=o.opt("subject"); if(raw is String && raw.isNotBlank()) return raw; if(raw is JSONObject) return raw.optString("longName").ifBlank{raw.optString("name")}; return o.optString("subjectName").ifBlank{o.optString("subjectLongName")} }
+    private fun extractTeacher(o: JSONObject?): String { o ?: return ""; return o.optString("longName").ifBlank{o.optString("displayName").ifBlank{o.optString("name")}} }
+    private fun serverBase(): String = "https://${config.server.removePrefix("https://").removePrefix("http://").trim('/')}/"
+    private fun openConnection(endpoint: String) = (URL(endpoint).openConnection() as HttpURLConnection).apply { connectTimeout=15_000; readTimeout=20_000; instanceFollowRedirects=true; setRequestProperty("User-Agent","HamzaStudyHub/0.4 Android"); setRequestProperty("Accept","application/json, text/plain, */*") }
+    private fun readResponse(c: HttpURLConnection): String { val code=c.responseCode; val stream=if(code in 200..299)c.inputStream else c.errorStream; val body=if(stream==null)"" else BufferedReader(InputStreamReader(stream, StandardCharsets.UTF_8)).use{it.readText()}; if(code !in 200..299) error("WebUntis HTTP $code: ${body.take(250)}"); return body }
+    private fun extractCookie(headers: List<String>, name: String): String? { val prefix="$name="; return headers.asSequence().flatMap{it.split(';').asSequence()}.map{it.trim()}.firstOrNull{it.startsWith(prefix,true)}?.substringAfter('=')?.trim()?.trim('"')?.takeIf{it.isNotBlank()} }
 }
