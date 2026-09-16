@@ -26,40 +26,27 @@ import java.util.Date
 import java.util.Locale
 
 class HomeActivity : AppCompatActivity() {
-    private lateinit var newMetric: TextView
-    private lateinit var attentionMetric: TextView
-    private lateinit var attemptsMetric: TextView
-    private lateinit var priorityText: TextView
-    private lateinit var sourceText: TextView
-
+    private lateinit var newMetric: TextView; private lateinit var attentionMetric: TextView; private lateinit var attemptsMetric: TextView; private lateinit var priorityText: TextView; private lateinit var sourceText: TextView
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContentView(buildScreen()); scheduleConnectedSources() }
     override fun onResume() { super.onResume(); refresh() }
-
     private fun buildScreen(): View {
-        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutDirection = View.LAYOUT_DIRECTION_RTL; setPadding(HamzaUi.dp(this@HomeActivity,18),HamzaUi.dp(this@HomeActivity,20),HamzaUi.dp(this@HomeActivity,18),HamzaUi.dp(this@HomeActivity,30)); setBackgroundColor(HamzaUi.bg) }
-        val hero = HamzaUi.card(this, radius=22, padding=18).apply { setCardBackgroundColor(HamzaUi.navy); strokeWidth=0 }
-        val heroBody=HamzaUi.cardContent(hero)
-        heroBody.addView(TextView(this).apply { text=getString(R.string.brand_name); textSize=12.5f; letterSpacing=.08f; setTypeface(typeface,Typeface.BOLD); gravity=Gravity.END; setTextColor(Color.rgb(191,216,242)) })
-        heroBody.addView(TextView(this).apply { text="متابعة حمزة"; textSize=29f; setTypeface(typeface,Typeface.BOLD); gravity=Gravity.END; setPadding(0,HamzaUi.dp(this@HomeActivity,5),0,0); setTextColor(Color.WHITE) })
-        heroBody.addView(TextView(this).apply { text="واجبات • خطة يومية • كتب • محاولات • تقدم"; textSize=14.5f; gravity=Gravity.END; setTextColor(Color.rgb(218,230,243)) })
-        content.addView(hero)
-        content.addView(HamzaUi.section(this,"نظرة سريعة"))
-        val metrics=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER }
-        newMetric=metric("الجديد",0xFFE8F1FF.toInt(),HamzaUi.blue); attentionMetric=metric("يحتاج انتباه",0xFFFFEFE2.toInt(),HamzaUi.amber); attemptsMetric=metric("المحاولات",0xFFEAF6EF.toInt(),HamzaUi.green)
-        metrics.addView(newMetric,weighted(4)); metrics.addView(attentionMetric,weighted(4)); metrics.addView(attemptsMetric,weighted(0)); content.addView(metrics)
-        content.addView(HamzaUi.section(this,"أولوية اليوم")); priorityText=HamzaUi.statusBox(this,"جاري تجهيز الملخص…",Color.WHITE,HamzaUi.ink).apply { background=HamzaUi.rounded(Color.WHITE,HamzaUi.dp(this@HomeActivity,18).toFloat()) }; content.addView(priorityText)
+        val content=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;layoutDirection=View.LAYOUT_DIRECTION_RTL;setPadding(HamzaUi.dp(this@HomeActivity,18),HamzaUi.dp(this@HomeActivity,20),HamzaUi.dp(this@HomeActivity,18),HamzaUi.dp(this@HomeActivity,30));setBackgroundColor(HamzaUi.bg)}
+        val hero=HamzaUi.card(this,radius=22,padding=18).apply{setCardBackgroundColor(HamzaUi.navy);strokeWidth=0}; val heroBody=HamzaUi.cardContent(hero)
+        heroBody.addView(TextView(this).apply{text=getString(R.string.brand_name);textSize=12.5f;letterSpacing=.08f;setTypeface(typeface,Typeface.BOLD);gravity=Gravity.END;setTextColor(Color.rgb(191,216,242))})
+        heroBody.addView(TextView(this).apply{text="متابعة حمزة";textSize=29f;setTypeface(typeface,Typeface.BOLD);gravity=Gravity.END;setPadding(0,HamzaUi.dp(this@HomeActivity,5),0,0);setTextColor(Color.WHITE)})
+        heroBody.addView(TextView(this).apply{text="واجبات • خطة يومية • شنطة بكرة • كتب • تقدم";textSize=14.5f;gravity=Gravity.END;setTextColor(Color.rgb(218,230,243))});content.addView(hero)
+        content.addView(HamzaUi.section(this,"نظرة سريعة"));val metrics=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER};newMetric=metric("الجديد",0xFFE8F1FF.toInt(),HamzaUi.blue);attentionMetric=metric("يحتاج انتباه",0xFFFFEFE2.toInt(),HamzaUi.amber);attemptsMetric=metric("المحاولات",0xFFEAF6EF.toInt(),HamzaUi.green);metrics.addView(newMetric,weighted(4));metrics.addView(attentionMetric,weighted(4));metrics.addView(attemptsMetric,weighted(0));content.addView(metrics)
+        content.addView(HamzaUi.section(this,"أولوية اليوم"));priorityText=HamzaUi.statusBox(this,"جاري تجهيز الملخص…",Color.WHITE,HamzaUi.ink).apply{background=HamzaUi.rounded(Color.WHITE,HamzaUi.dp(this@HomeActivity,18).toFloat())};content.addView(priorityText)
         content.addView(HamzaUi.section(this,"الوصول السريع"))
-        content.addView(actionCard("خطة اليوم","جدول حمزة من الرجوع للبيت حتى النوم مع متابعة الإنجاز.","فتح خطة اليوم"){ startActivity(Intent(this,StudyPlanActivity::class.java)) })
-        content.addView(actionCard("الواجبات","شاهد الجديد وما يحتاج انتباه وافتح المصدر الرسمي.","فتح المتابعة"){ startActivity(Intent(this,MainActivity::class.java)) })
-        content.addView(actionCard("كتب حمزة","اربط ملفات Deutsch وHSU وMathe ليعرف النظام الصفحة والتمرين.","فتح المكتبة"){ startActivity(Intent(this,BookLibraryActivity::class.java)) })
-        content.addView(actionCard("المصادر والمزامنة","WebUntis وTeams وحالة الإشعارات في مكان واحد.","إدارة المصادر"){ startActivity(Intent(this,SourceHubActivity::class.java)) })
-        content.addView(actionCard("ملف التعلّم","راجع عدد المحاولات المحفوظة وبداية بناء اتجاهات الأداء.","عرض الحالة"){ showLearningSummary() })
-        content.addView(HamzaUi.section(this,"حالة المصادر")); sourceText=HamzaUi.statusBox(this,"",0xFFF0F4F8.toInt(),HamzaUi.muted); content.addView(sourceText)
-        content.addView(HamzaUi.subtitle(this,"المعلومة غير المؤكدة تظل في «يحتاج انتباه» بدل ما النظام يخمّن. الملفات ومحاولات حمزة تبقى خاصة على الجهاز."),HamzaUi.marginTop(this,16))
-        return ScrollView(this).apply { isFillViewport=true; addView(content) }
+        content.addView(actionCard("🎒 شنطة حمزة","تتجهز تلقائيًا من حصص Untis لليوم الدراسي التالي وتستبعد الحصص الملغاة.","تجهيز شنطة بكرة"){startActivity(Intent(this,SchoolBagActivity::class.java))})
+        content.addView(actionCard("خطة اليوم","جدول حمزة من الرجوع للبيت حتى النوم مع متابعة الإنجاز.","فتح خطة اليوم"){startActivity(Intent(this,StudyPlanActivity::class.java))})
+        content.addView(actionCard("الواجبات","شاهد الجديد وما يحتاج انتباه وافتح المصدر الرسمي.","فتح المتابعة"){startActivity(Intent(this,MainActivity::class.java))})
+        content.addView(actionCard("كتب حمزة","اربط ملفات Deutsch وHSU وMathe ليعرف النظام الصفحة والتمرين.","فتح المكتبة"){startActivity(Intent(this,BookLibraryActivity::class.java))})
+        content.addView(actionCard("المصادر والمزامنة","WebUntis وTeams وحالة الإشعارات في مكان واحد.","إدارة المصادر"){startActivity(Intent(this,SourceHubActivity::class.java))})
+        content.addView(actionCard("ملف التعلّم","راجع عدد المحاولات المحفوظة وبداية بناء اتجاهات الأداء.","عرض الحالة"){showLearningSummary()})
+        content.addView(HamzaUi.section(this,"حالة المصادر"));sourceText=HamzaUi.statusBox(this,"",0xFFF0F4F8.toInt(),HamzaUi.muted);content.addView(sourceText);content.addView(HamzaUi.subtitle(this,"المعلومة غير المؤكدة تظل في «يحتاج انتباه» بدل ما النظام يخمّن. الملفات ومحاولات حمزة تبقى خاصة على الجهاز."),HamzaUi.marginTop(this,16));return ScrollView(this).apply{isFillViewport=true;addView(content)}
     }
-
-    private fun refresh(){ val items=readFeed().sortedByDescending{it.optLong("timestamp")}; val newCount=items.count{it.optBoolean("isNew",true)}; val attention=items.filter{it.optBoolean("needsAttention",false)&&!it.optBoolean("attentionResolved",false)}; val attempts=LearningEvidenceStore(this).attempts().size; newMetric.text=getString(R.string.metric_new,newCount); attentionMetric.text=getString(R.string.metric_attention,attention.size); attemptsMetric.text=getString(R.string.metric_attempts,attempts); val top=attention.firstOrNull()?:items.firstOrNull{it.optBoolean("isNew",true)}; priorityText.text=when{top==null->"كل شيء هادئ حاليًا. لا يوجد تحديث يحتاج تدخل منك.";attention.isNotEmpty()->"يحتاج انتباه الآن\n${top.optString("title").ifBlank{"تحديث مدرسي"}}\n${top.optString("attentionReason").take(150)}";else->"أحدث تحديث\n${top.optString("title").ifBlank{"تحديث مدرسي"}}"}; val untis=if(WebUntisConfigStore.isConfigured(this)){val last=WebUntisConfigStore.lastSync(this);if(last>0)"WebUntis متصل • ${formatTime(last)}" else "WebUntis متصل"}else "WebUntis غير متصل"; val teams=TeamsAuthStore.account(this)?.let{val last=TeamsAuthStore.lastSync(this);if(last>0)"Teams متصل • ${formatTime(last)}" else "Teams متصل بالحساب"}?:"Teams جاهز لتسجيل الدخول"; sourceText.text=getString(R.string.home_source_summary,untis,teams,BookLibraryStore(this).allBooks().size) }
+    private fun refresh(){val items=readFeed().sortedByDescending{it.optLong("timestamp")};val newCount=items.count{it.optBoolean("isNew",true)};val attention=items.filter{it.optBoolean("needsAttention",false)&&!it.optBoolean("attentionResolved",false)};val attempts=LearningEvidenceStore(this).attempts().size;newMetric.text=getString(R.string.metric_new,newCount);attentionMetric.text=getString(R.string.metric_attention,attention.size);attemptsMetric.text=getString(R.string.metric_attempts,attempts);val top=attention.firstOrNull()?:items.firstOrNull{it.optBoolean("isNew",true)};priorityText.text=when{top==null->"كل شيء هادئ حاليًا. لا يوجد تحديث يحتاج تدخل منك.";attention.isNotEmpty()->"يحتاج انتباه الآن\n${top.optString("title").ifBlank{"تحديث مدرسي"}}\n${top.optString("attentionReason").take(150)}";else->"أحدث تحديث\n${top.optString("title").ifBlank{"تحديث مدرسي"}}"};val untis=if(WebUntisConfigStore.isConfigured(this)){val last=WebUntisConfigStore.lastSync(this);if(last>0)"WebUntis متصل • ${formatTime(last)}" else "WebUntis متصل"}else "WebUntis غير متصل";val teams=TeamsAuthStore.account(this)?.let{val last=TeamsAuthStore.lastSync(this);if(last>0)"Teams متصل • ${formatTime(last)}" else "Teams متصل بالحساب"}?:"Teams جاهز لتسجيل الدخول";sourceText.text=getString(R.string.home_source_summary,untis,teams,BookLibraryStore(this).allBooks().size)}
     private fun scheduleConnectedSources(){if(WebUntisConfigStore.isConfigured(this))WebUntisSyncWorker.schedule(this);if(TeamsAuthStore.account(this)!=null)TeamsSyncWorker.schedule(this)}
     private fun metric(label:String,bg:Int,fg:Int)=HamzaUi.softPill(this,"0\n$label",bg,fg).apply{textSize=14f;gravity=Gravity.CENTER;minHeight=HamzaUi.dp(this@HomeActivity,66)}
     private fun weighted(endMargin:Int)=LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.WRAP_CONTENT,1f).apply{marginEnd=HamzaUi.dp(this@HomeActivity,endMargin)}
