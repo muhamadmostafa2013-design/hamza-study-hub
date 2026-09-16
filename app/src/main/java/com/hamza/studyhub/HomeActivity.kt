@@ -11,6 +11,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.hamza.studyhub.agents.StudySupervisorAgent
 import com.hamza.studyhub.books.BookLibraryActivity
 import com.hamza.studyhub.books.BookLibraryStore
 import com.hamza.studyhub.learning.LearningEvidenceStore
@@ -30,6 +31,7 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var attentionMetric: TextView
     private lateinit var attemptsMetric: TextView
     private lateinit var priorityText: TextView
+    private lateinit var agentStatusText: TextView
     private lateinit var sourceText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,6 +96,17 @@ class HomeActivity : AppCompatActivity() {
         }
         content.addView(priorityText)
 
+        content.addView(HamzaUi.section(this, "وكيل المذاكرة"))
+        agentStatusText = HamzaUi.statusBox(this, "جاري قراءة الأدلة وترتيب الأولويات…", 0xFFEFF5FC.toInt(), HamzaUi.blue)
+        content.addView(agentStatusText)
+        content.addView(HamzaUi.primaryButton(this, "تشغيل الوكيل الآن").apply {
+            tag = "home_study_supervisor"
+            setOnClickListener { showStudySupervisor(force = true) }
+        }, HamzaUi.marginTop(this, 9))
+        content.addView(HamzaUi.subtitle(this,
+            "الوكيل يرتب فقط ما هو موجود في المصادر والمحاولات المحفوظة. لا يغيّر واجبات المدرسة ولا يخمّن موعدًا غير موجود."),
+            HamzaUi.marginTop(this, 7))
+
         content.addView(HamzaUi.section(this, "الوصول السريع"))
         content.addView(actionCard("الواجبات", "شاهد الجديد وما يحتاج انتباه وافتح المصدر الرسمي.", "فتح المتابعة") {
             startActivity(Intent(this, MainActivity::class.java))
@@ -123,10 +136,10 @@ class HomeActivity : AppCompatActivity() {
         val items = readFeed().sortedByDescending { it.optLong("timestamp") }
         val newCount = items.count { it.optBoolean("isNew", true) }
         val attention = items.filter { it.optBoolean("needsAttention", false) && !it.optBoolean("attentionResolved", false) }
-        val attempts = LearningEvidenceStore(this).attempts().size
+        val attempts = LearningEvidenceStore(this).attempts()
         newMetric.text = getString(R.string.metric_new, newCount)
         attentionMetric.text = getString(R.string.metric_attention, attention.size)
-        attemptsMetric.text = getString(R.string.metric_attempts, attempts)
+        attemptsMetric.text = getString(R.string.metric_attempts, attempts.size)
 
         val top = attention.firstOrNull() ?: items.firstOrNull { it.optBoolean("isNew", true) }
         priorityText.text = when {
@@ -135,15 +148,33 @@ class HomeActivity : AppCompatActivity() {
             else -> "أحدث تحديث\n${top.optString("title").ifBlank { "تحديث مدرسي" }}"
         }
 
+        val report = StudySupervisorAgent(this).runIfNeeded(items)
+        agentStatusText.text = report.compactText()
+        agentStatusText.setTextColor(when {
+            report.confirmations.isNotEmpty() -> HamzaUi.amber
+            report.actions.isNotEmpty() -> HamzaUi.blue
+            else -> HamzaUi.green
+        })
+
         val untis = if (WebUntisConfigStore.isConfigured(this)) {
             val last = WebUntisConfigStore.lastSync(this)
             if (last > 0) "WebUntis متصل • ${formatTime(last)}" else "WebUntis متصل"
         } else "WebUntis غير متصل"
-        val teams = TeamsAuthStore.account(this)?.let { account ->
+        val teams = TeamsAuthStore.account(this)?.let {
             val last = TeamsAuthStore.lastSync(this)
             if (last > 0) "Teams متصل • ${formatTime(last)}" else "Teams متصل بالحساب"
         } ?: "Teams جاهز لتسجيل الدخول"
         sourceText.text = getString(R.string.home_source_summary, untis, teams, BookLibraryStore(this).allBooks().size)
+    }
+
+    private fun showStudySupervisor(force: Boolean) {
+        val report = StudySupervisorAgent(this).runIfNeeded(readFeed(), force)
+        agentStatusText.text = report.compactText()
+        AlertDialog.Builder(this)
+            .setTitle("وكيل المذاكرة")
+            .setMessage(report.parentBrief())
+            .setPositiveButton("تمام", null)
+            .show()
     }
 
     private fun scheduleConnectedSources() {
