@@ -1,43 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <application
-        android:allowBackup="false"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="Hamza Study Hub"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.HamzaStudyHub">
-
-        <activity android:name=".LaunchActivity" android:exported="true" android:theme="@style/Theme.HamzaStudyHub.Starting">
-            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
-        </activity>
+    <application android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:label="Hamza Study Hub" android:supportsRtl="true" android:theme="@style/Theme.HamzaStudyHub">
+        <activity android:name=".LaunchActivity" android:exported="true" android:theme="@style/Theme.HamzaStudyHub.Starting"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>
         <activity android:name=".HomeActivity" android:exported="false" />
         <activity android:name=".StudyPlanActivity" android:exported="false" />
+        <activity android:name=".SchoolBagActivity" android:exported="false" />
         <activity android:name=".SourceHubActivity" android:exported="false" />
         <activity android:name=".books.BookLibraryActivity" android:exported="false" />
         <activity android:name=".learning.StudentWorkCaptureActivity" android:exported="false" />
         <activity android:name=".teams.TeamsConnectionActivity" android:exported="false" />
-
-        <activity android:name=".MainActivity" android:exported="true">
-            <intent-filter><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="text/plain" /></intent-filter>
-            <intent-filter><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="image/*" /></intent-filter>
-        </activity>
-
-        <activity android:name="com.microsoft.identity.client.BrowserTabActivity" android:exported="true">
-            <intent-filter><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="msauth" android:host="${applicationId}" android:pathPrefix="/" /></intent-filter>
-        </activity>
-
-        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.files" android:exported="false" android:grantUriPermissions="true">
-            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
-        </provider>
-        <service android:name=".notification.SchoolNotificationListener" android:label="Hamza Study Hub Notification Access" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true">
-            <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
-        </service>
+        <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="text/plain" /></intent-filter><intent-filter><action android:name="android.intent.action.SEND" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="image/*" /></intent-filter></activity>
+        <activity android:name="com.microsoft.identity.client.BrowserTabActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="msauth" android:host="${applicationId}" android:pathPrefix="/" /></intent-filter></activity>
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.files" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" /></provider>
+        <service android:name=".notification.SchoolNotificationListener" android:label="Hamza Study Hub Notification Access" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true"><intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter></service>
     </application>
 </manifest>
