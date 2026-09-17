@@ -5,6 +5,7 @@ import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import com.hamza.studyhub.books.BookLibraryActivity
 import com.hamza.studyhub.learning.StudentWorkCaptureActivity
@@ -12,6 +13,7 @@ import com.hamza.studyhub.teams.TeamsConnectionActivity
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -71,11 +73,15 @@ class UiButtonSmokeTest {
         assertFalse(saved.optBoolean("isNew", true))
     }
 
-    @Test fun homeDashboardNavigationButtonsCanBeClickedWithoutCrash() {
+    @Test fun homeDashboardNavigationShortcutsCanBeClickedWithoutCrash() {
         val activity = launch(HomeActivity::class.java)
-        val buttons = allButtons(activity.window.decorView)
-        assertTrue(buttons.size >= 4)
-        buttons.forEach { it.performClick() }
+        val root = activity.window.decorView
+        listOf("Schultasche", "Hausaufgaben", "Bücher", "Schulquellen").forEach { label ->
+            val clickable = clickableAncestorForText(root, label)
+            assertNotNull("Expected clickable home shortcut for $label", clickable)
+            assertTrue("Shortcut $label has no click handler", clickable!!.hasOnClickListeners())
+            assertTrue("Shortcut $label did not accept click", clickable.performClick())
+        }
     }
 
     private fun seedAttentionHomework() {
@@ -105,6 +111,25 @@ class UiButtonSmokeTest {
         buttons.forEach { button ->
             assertTrue("Unwired button in ${activity.javaClass.simpleName}: ${button.text}", button.hasOnClickListeners())
         }
+    }
+
+    private fun clickableAncestorForText(root: View, text: String): View? {
+        var target: TextView? = null
+        fun walk(view: View) {
+            if (target != null) return
+            if (view is TextView && view.visibility == View.VISIBLE && view.text.toString() == text) {
+                target = view
+                return
+            }
+            if (view is ViewGroup) for (i in 0 until view.childCount) walk(view.getChildAt(i))
+        }
+        walk(root)
+        var current: View? = target
+        while (current != null) {
+            if (current.isClickable && current.hasOnClickListeners()) return current
+            current = current.parent as? View
+        }
+        return null
     }
 
     private fun allButtons(root: View): List<Button> {
