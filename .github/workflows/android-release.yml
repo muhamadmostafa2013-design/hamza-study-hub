@@ -13,6 +13,8 @@ on:
         type: boolean
         default: true
   push:
+    branches:
+      - 'feature/hamza-study-plan'
     tags:
       - 'v*'
 
@@ -21,6 +23,7 @@ permissions:
 
 jobs:
   release:
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[release]')
     runs-on: ubuntu-latest
 
     steps:
@@ -38,7 +41,7 @@ jobs:
         run: |
           echo "ANDROID_HOME=${ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
           yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-37" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -50,14 +53,23 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION_NAME="${{ inputs.version_name }}"
-          else
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION_NAME="${GITHUB_REF_NAME#v}"
+          else
+            VERSION_NAME="$(tr -d '[:space:]' < release-version.txt)"
+          fi
+          if ! [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid VERSION_NAME: $VERSION_NAME"
+            exit 1
           fi
           VERSION_CODE="$GITHUB_RUN_NUMBER"
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=v$VERSION_NAME" >> "$GITHUB_ENV"
           echo "Building Hamza Study Hub $VERSION_NAME ($VERSION_CODE)"
+
+      - name: Run tests before signing
+        run: gradle :app:testDebugUnitTest --stacktrace
 
       - name: Restore release keystore
         env:
@@ -85,14 +97,15 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle :app:assembleRelease :app:lintVitalRelease --stacktrace
 
-      - name: Verify APK signature and permissions
+      - name: Verify APK signature and merged manifest
         shell: bash
         run: |
           APK="app/build/outputs/apk/release/app-release.apk"
           test -f "$APK"
-          "${ANDROID_SDK_ROOT}/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "${ANDROID_SDK_ROOT}/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signature.txt
           "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/apkanalyzer" manifest permissions "$APK" | tee apk-permissions.txt
-          if grep -Eq 'BIND_NOTIFICATION_LISTENER_SERVICE|REQUEST_INSTALL_PACKAGES|SYSTEM_ALERT_WINDOW|BIND_ACCESSIBILITY_SERVICE' apk-permissions.txt; then
+          "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/apkanalyzer" manifest print "$APK" | tee apk-manifest.xml
+          if grep -Eq 'BIND_NOTIFICATION_LISTENER_SERVICE|REQUEST_INSTALL_PACKAGES|SYSTEM_ALERT_WINDOW|BIND_ACCESSIBILITY_SERVICE' apk-manifest.xml apk-permissions.txt; then
             echo "Restricted permission/component detected in release APK"
             exit 1
           fi
@@ -111,21 +124,25 @@ jobs:
             Hamza-Study-Hub-v${{ env.VERSION_NAME }}.apk
             SHA256SUMS.txt
             apk-permissions.txt
+            apk-manifest.xml
+            apk-signature.txt
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release) || (github.event_name == 'push' && github.ref == 'refs/heads/feature/hamza-study-plan' && contains(github.event.head_commit.message, '[release]'))
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists; replacing release assets."
-            gh release upload "$RELEASE_TAG" "Hamza-Study-Hub-v${VERSION_NAME}.apk" SHA256SUMS.txt apk-permissions.txt --clobber
+            gh release upload "$RELEASE_TAG" "Hamza-Study-Hub-v${VERSION_NAME}.apk" SHA256SUMS.txt apk-permissions.txt apk-manifest.xml apk-signature.txt --clobber
           else
             gh release create "$RELEASE_TAG" \
               "Hamza-Study-Hub-v${VERSION_NAME}.apk" \
               SHA256SUMS.txt \
               apk-permissions.txt \
+              apk-manifest.xml \
+              apk-signature.txt \
               --target "$GITHUB_SHA" \
               --title "Hamza Study Hub v${VERSION_NAME}" \
               --generate-notes
