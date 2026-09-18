@@ -92,7 +92,7 @@ class SchoolBagActivity : AppCompatActivity() {
                     )
                 }.onFailure { error ->
                     if (hadCache) {
-                        showTransientNote("📡 عرضنا آخر جدول محفوظ. تعذر التحديث الآن: \${error.message.orEmpty()}")
+                        showTransientNote("📡 عرضنا آخر جدول محفوظ. تعذر التحديث الآن: ${error.message.orEmpty()}")
                     } else {
                         renderLoadError(target, error.message.orEmpty())
                     }
@@ -108,7 +108,7 @@ class SchoolBagActivity : AppCompatActivity() {
         content.addView(
             HamzaUi.statusBox(
                 this,
-                "🎒 بنجهز شنطة حمزة…\\nأول مرة بنقرأ جدول WebUntis، وبعدها الشنطة هتظهر فورًا من الكاش.",
+                "🎒 بنجهز شنطة حمزة…\nأول مرة بنقرأ جدول WebUntis، وبعدها الشنطة هتظهر فورًا من الكاش.",
                 0xFFEFF5FC.toInt(),
                 HamzaUi.blue
             ),
@@ -144,7 +144,7 @@ class SchoolBagActivity : AppCompatActivity() {
         content.addView(
             HamzaUi.statusBox(
                 this,
-                "تعذر قراءة جدول Untis الآن. \${message.ifBlank { "جرّب التحديث بعد لحظات." }}",
+                "تعذر قراءة جدول Untis الآن. ${message.ifBlank { "جرّب التحديث بعد لحظات." }}",
                 0xFFFFEFE2.toInt(),
                 HamzaUi.amber
             ),
@@ -193,7 +193,7 @@ class SchoolBagActivity : AppCompatActivity() {
             HamzaUi.subtitle(
                 this,
                 if (grouped.isEmpty()) "مفيش حصص مؤكدة في Untis لليوم ده."
-                else "\${active.size} حصة • \${grouped.size} مادة • علّم كل مادة بعد ما تحط حاجتها"
+                else "${active.size} حصة • ${grouped.size} مادة • علّم كل مادة بعد ما تحط حاجتها"
             ),
             HamzaUi.marginTop(this, 4)
         )
@@ -277,7 +277,7 @@ class SchoolBagActivity : AppCompatActivity() {
             setPadding(0, HamzaUi.dp(this@SchoolBagActivity, 7), 0, 0)
         })
         body.addView(TextView(this).apply {
-            text = "مواد \${formatArabicDate(target)} • نجهزها في دقيقتين ✨"
+            text = "مواد ${formatArabicDate(target)} • نجهزها في دقيقتين ✨"
             textSize = 15f
             setTextColor(0xFFE6EFF8.toInt())
             gravity = Gravity.END
@@ -295,7 +295,7 @@ class SchoolBagActivity : AppCompatActivity() {
 
         val times = lessons
             .sortedBy { it.startTime }
-            .joinToString(" • ") { "\${formatTime(it.startTime)}–\${formatTime(it.endTime)}" }
+            .joinToString(" • ") { "${formatTime(it.startTime)}–${formatTime(it.endTime)}" }
         val room = lessons.map { it.room }.firstOrNull { it.isNotBlank() }
 
         body.addView(TextView(this).apply {
@@ -346,7 +346,7 @@ class SchoolBagActivity : AppCompatActivity() {
             body.addView(
                 HamzaUi.statusBox(
                     this,
-                    "📎 Teams مرتبط بالمادة\\n" + teamsNotes.take(2).joinToString("\\n") { "• $it" },
+                    "📎 Teams مرتبط بالمادة\n" + teamsNotes.take(2).joinToString("\n") { "• $it" },
                     0xFFF0EBFF.toInt(),
                     HamzaUi.purple
                 ),
@@ -476,7 +476,7 @@ class SchoolBagActivity : AppCompatActivity() {
             s.contains("musik") || s.contains("music") ->
                 listOf("🎵 دفتر أو ملف الموسيقى")
             else -> buildList {
-                add("📘 \${bookTitle ?: "كتاب المادة"}")
+                add("📘 ${bookTitle ?: "كتاب المادة"}")
                 add("📓 الكراسة / الدفتر")
                 add("📂 أي أوراق أو ملف مطلوب للمادة")
             }
@@ -548,5 +548,5 @@ class SchoolBagActivity : AppCompatActivity() {
         "%02d:%02d".format(value / 100, value % 100)
 
     private fun checkKey(date: LocalDate, item: String): String =
-        "bag_\${date.toBasicInt()}_\${item.hashCode()}"
+        "bag_${date.toBasicInt()}_${item.hashCode()}"
 }
