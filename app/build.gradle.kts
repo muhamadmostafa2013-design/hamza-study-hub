@@ -27,6 +27,10 @@ android {
         versionName = System.getenv("VERSION_NAME") ?: "0.3.0"
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     if (hasReleaseSigning) {
         signingConfigs {
             create("release") {

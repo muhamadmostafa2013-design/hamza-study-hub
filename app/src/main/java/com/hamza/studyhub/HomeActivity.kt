@@ -9,33 +9,24 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.hamza.studyhub.books.BookLibraryActivity
-import com.hamza.studyhub.books.BookLibraryStore
-import com.hamza.studyhub.learning.LearningEvidenceStore
-import com.hamza.studyhub.teams.TeamsAuthStore
-import com.hamza.studyhub.teams.TeamsSyncWorker
 import com.hamza.studyhub.ui.HamzaUi
+import com.hamza.studyhub.update.AppUpdateManager
 import com.hamza.studyhub.webuntis.WebUntisConfigStore
 import com.hamza.studyhub.webuntis.WebUntisSyncWorker
+import com.hamza.studyhub.teams.TeamsAuthStore
+import com.hamza.studyhub.teams.TeamsSyncWorker
 import org.json.JSONObject
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class HomeActivity : AppCompatActivity() {
-    private lateinit var newMetric: TextView
-    private lateinit var attentionMetric: TextView
-    private lateinit var attemptsMetric: TextView
-    private lateinit var priorityText: TextView
-    private lateinit var sourceText: TextView
+    private lateinit var todayStatus: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildScreen())
         scheduleConnectedSources()
+        AppUpdateManager.check(this, silentIfCurrent = true)
     }
 
     override fun onResume() {
@@ -47,103 +38,67 @@ class HomeActivity : AppCompatActivity() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(HamzaUi.dp(this@HomeActivity, 18), HamzaUi.dp(this@HomeActivity, 20), HamzaUi.dp(this@HomeActivity, 18), HamzaUi.dp(this@HomeActivity, 30))
-            setBackgroundColor(HamzaUi.bg)
+            setPadding(HamzaUi.dp(this@HomeActivity, 18), HamzaUi.dp(this@HomeActivity, 18), HamzaUi.dp(this@HomeActivity, 18), HamzaUi.dp(this@HomeActivity, 34))
+            setBackgroundColor(0xFFF7F8FC.toInt())
         }
 
-        val hero = HamzaUi.card(this, radius = 22, padding = 18).apply {
-            setCardBackgroundColor(HamzaUi.navy)
-            strokeWidth = 0
-        }
+        val hero = HamzaUi.card(this, radius = 26, padding = 20).apply { setCardBackgroundColor(0xFF173F6B.toInt()); strokeWidth = 0 }
         val heroBody = HamzaUi.cardContent(hero)
-        heroBody.addView(TextView(this).apply {
-            text = getString(R.string.brand_name)
-            textSize = 12.5f
-            letterSpacing = 0.08f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.END
-            setTextColor(Color.rgb(191, 216, 242))
-        })
-        heroBody.addView(TextView(this).apply {
-            text = "متابعة حمزة"
-            textSize = 29f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.END
-            setPadding(0, HamzaUi.dp(this@HomeActivity, 5), 0, 0)
-            setTextColor(Color.WHITE)
-        })
-        heroBody.addView(TextView(this).apply {
-            text = "واجبات • مواعيد • كتب • محاولات • تقدم"
-            textSize = 14.5f
-            gravity = Gravity.END
-            setTextColor(Color.rgb(218, 230, 243))
-        })
+        heroBody.addView(TextView(this).apply { text = "HAMZA STUDY HUB  •  🇩🇪"; textSize = 12f; letterSpacing = .08f; setTypeface(typeface, Typeface.BOLD); setTextColor(0xFFC9DCF2.toInt()); gravity = Gravity.END })
+        heroBody.addView(TextView(this).apply { text = "👋 Hallo Hamza!"; textSize = 29f; setTypeface(typeface, Typeface.BOLD); setTextColor(Color.WHITE); gravity = Gravity.END; setPadding(0, HamzaUi.dp(this@HomeActivity, 8), 0, 0) })
+        heroBody.addView(TextView(this).apply { text = "Bereit für heute?  يلا نخلّص يومنا خطوة خطوة ⭐"; textSize = 15f; setTextColor(0xFFE6EFF8.toInt()); gravity = Gravity.END })
         content.addView(hero)
 
-        content.addView(HamzaUi.section(this, "نظرة سريعة"))
-        val metrics = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        newMetric = metric("الجديد", 0xFFE8F1FF.toInt(), HamzaUi.blue)
-        attentionMetric = metric("يحتاج انتباه", 0xFFFFEFE2.toInt(), HamzaUi.amber)
-        attemptsMetric = metric("المحاولات", 0xFFEAF6EF.toInt(), HamzaUi.green)
-        metrics.addView(newMetric, weighted(4)); metrics.addView(attentionMetric, weighted(4)); metrics.addView(attemptsMetric, weighted(0))
-        content.addView(metrics)
+        content.addView(HamzaUi.section(this, "🎯 مهمتك النهارده"))
+        val plan = HamzaUi.card(this, radius = 24, padding = 18).apply { setCardBackgroundColor(0xFFFFF3D8.toInt()); strokeColor = 0xFFFFD36A.toInt() }
+        val planBody = HamzaUi.cardContent(plan)
+        planBody.addView(TextView(this).apply { text = "📚  Mein Plan"; textSize = 24f; setTypeface(typeface, Typeface.BOLD); setTextColor(0xFF173F6B.toInt()); gravity = Gravity.END })
+        planBody.addView(TextView(this).apply { text = "خطة حمزة للمذاكرة • راحة + مذاكرة + تجهيز بكرة"; textSize = 15f; setTextColor(0xFF5D6572.toInt()); gravity = Gravity.END; setPadding(0, HamzaUi.dp(this@HomeActivity, 5), 0, HamzaUi.dp(this@HomeActivity, 10)) })
+        planBody.addView(HamzaUi.primaryButton(this, "▶  ابدأ خطة حمزة").apply { setOnClickListener { startActivity(Intent(this@HomeActivity, StudyPlanActivity::class.java)) } })
+        content.addView(plan)
 
-        content.addView(HamzaUi.section(this, "أولوية اليوم"))
-        priorityText = HamzaUi.statusBox(this, "جاري تجهيز الملخص…", Color.WHITE, HamzaUi.ink).apply {
-            background = HamzaUi.rounded(Color.WHITE, HamzaUi.dp(this@HomeActivity, 18).toFloat())
-        }
-        content.addView(priorityText)
+        content.addView(HamzaUi.section(this, "🏫 Meine Schule"))
+        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row1.addView(shortcut("🎒", "Schultasche", "شنطة بكرة", 0xFFE8F4EA.toInt()) { startActivity(Intent(this, SchoolBagActivity::class.java)) }, tileParams(6))
+        row1.addView(shortcut("📝", "Hausaufgaben", "الواجبات", 0xFFE9F2FF.toInt()) { startActivity(Intent(this, MainActivity::class.java)) }, tileParams(0))
+        content.addView(row1)
+        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row2.addView(shortcut("📚", "Bücher", "كتب حمزة", 0xFFFFEFE4.toInt()) { startActivity(Intent(this, com.hamza.studyhub.books.BookLibraryActivity::class.java)) }, tileParams(6))
+        row2.addView(shortcut("🔄", "Schulquellen", "Untis + Teams", 0xFFF0EBFF.toInt()) { startActivity(Intent(this, SourceHubActivity::class.java)) }, tileParams(0))
+        content.addView(row2, HamzaUi.marginTop(this, 10))
 
-        content.addView(HamzaUi.section(this, "الوصول السريع"))
-        content.addView(actionCard("الواجبات", "شاهد الجديد وما يحتاج انتباه وافتح المصدر الرسمي.", "فتح المتابعة") {
-            startActivity(Intent(this, MainActivity::class.java))
-        })
-        content.addView(actionCard("كتب حمزة", "اربط ملفات Deutsch وHSU وMathe ليعرف النظام الصفحة والتمرين.", "فتح المكتبة") {
-            startActivity(Intent(this, BookLibraryActivity::class.java))
-        })
-        content.addView(actionCard("المصادر والمزامنة", "WebUntis وTeams وحالة الإشعارات في مكان واحد.", "إدارة المصادر") {
-            startActivity(Intent(this, SourceHubActivity::class.java))
-        })
-        content.addView(actionCard("ملف التعلّم", "راجع عدد المحاولات المحفوظة وبداية بناء اتجاهات الأداء.", "عرض الحالة") {
-            showLearningSummary()
-        })
+        content.addView(HamzaUi.section(this, "⭐ Heute"))
+        todayStatus = HamzaUi.statusBox(this, "لحظة… بنجهز يوم حمزة", Color.WHITE, 0xFF263238.toInt())
+        content.addView(todayStatus)
 
-        content.addView(HamzaUi.section(this, "حالة المصادر"))
-        sourceText = HamzaUi.statusBox(this, "", 0xFFF0F4F8.toInt(), HamzaUi.muted)
-        content.addView(sourceText)
-
-        content.addView(HamzaUi.subtitle(this,
-            "المعلومة غير المؤكدة تظل في «يحتاج انتباه» بدل ما النظام يخمّن. الملفات ومحاولات حمزة تبقى خاصة على الجهاز."),
-            HamzaUi.marginTop(this, 16))
+        content.addView(HamzaUi.secondaryButton(this, "🔄 فحص تحديث التطبيق").apply {
+            setOnClickListener { AppUpdateManager.check(this@HomeActivity, silentIfCurrent = false) }
+        }, HamzaUi.marginTop(this, 16))
+        content.addView(TextView(this).apply { text = "🇩🇪  Kleine Schritte. Jeden Tag.  •  خطوة صغيرة كل يوم"; textSize = 13.5f; gravity = Gravity.CENTER; setTextColor(0xFF737B87.toInt()) }, HamzaUi.marginTop(this, 18))
 
         return ScrollView(this).apply { isFillViewport = true; addView(content) }
     }
 
+    private fun shortcut(icon: String, german: String, arabic: String, bg: Int, action: () -> Unit): View {
+        val card = HamzaUi.card(this, radius = 22, padding = 15).apply { setCardBackgroundColor(bg); strokeWidth = 0; isClickable = true; isFocusable = true; setOnClickListener { action() } }
+        val body = HamzaUi.cardContent(card); body.gravity = Gravity.CENTER
+        body.addView(TextView(this).apply { text = icon; textSize = 31f; gravity = Gravity.CENTER })
+        body.addView(TextView(this).apply { text = german; textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(0xFF173F6B.toInt()); gravity = Gravity.CENTER })
+        body.addView(TextView(this).apply { text = arabic; textSize = 13f; setTextColor(0xFF68717D.toInt()); gravity = Gravity.CENTER })
+        return card
+    }
+
+    private fun tileParams(endMargin: Int) = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = HamzaUi.dp(this@HomeActivity, endMargin) }
+
     private fun refresh() {
         val items = readFeed().sortedByDescending { it.optLong("timestamp") }
-        val newCount = items.count { it.optBoolean("isNew", true) }
         val attention = items.filter { it.optBoolean("needsAttention", false) && !it.optBoolean("attentionResolved", false) }
-        val attempts = LearningEvidenceStore(this).attempts().size
-        newMetric.text = getString(R.string.metric_new, newCount)
-        attentionMetric.text = getString(R.string.metric_attention, attention.size)
-        attemptsMetric.text = getString(R.string.metric_attempts, attempts)
-
-        val top = attention.firstOrNull() ?: items.firstOrNull { it.optBoolean("isNew", true) }
-        priorityText.text = when {
-            top == null -> "كل شيء هادئ حاليًا. لا يوجد تحديث يحتاج تدخل منك."
-            attention.isNotEmpty() -> "يحتاج انتباه الآن\n${top.optString("title").ifBlank { "تحديث مدرسي" }}\n${top.optString("attentionReason").take(150)}"
-            else -> "أحدث تحديث\n${top.optString("title").ifBlank { "تحديث مدرسي" }}"
+        val homework = items.count { it.optString("type").contains("homework", true) || it.optString("title").contains("Hausaufgabe", true) }
+        todayStatus.text = when {
+            attention.isNotEmpty() -> "🔔 عندك ${attention.size} حاجة محتاجة مراجعة\n📝 $homework واجب ظاهر من المدرسة\nافتح Mein Plan ونرتبهم بهدوء."
+            items.isNotEmpty() -> "🎉 Alles gut! التحديثات موجودة ومفيش حاجة عاجلة دلوقتي.\nابدأ Mein Plan لما تكون جاهز."
+            else -> "🌤️ يوم هادي! افتح Mein Plan وابدأ بأول خطوة."
         }
-
-        val untis = if (WebUntisConfigStore.isConfigured(this)) {
-            val last = WebUntisConfigStore.lastSync(this)
-            if (last > 0) "WebUntis متصل • ${formatTime(last)}" else "WebUntis متصل"
-        } else "WebUntis غير متصل"
-        val teams = TeamsAuthStore.account(this)?.let { account ->
-            val last = TeamsAuthStore.lastSync(this)
-            if (last > 0) "Teams متصل • ${formatTime(last)}" else "Teams متصل بالحساب"
-        } ?: "Teams جاهز لتسجيل الدخول"
-        sourceText.text = getString(R.string.home_source_summary, untis, teams, BookLibraryStore(this).allBooks().size)
     }
 
     private fun scheduleConnectedSources() {
@@ -151,44 +106,9 @@ class HomeActivity : AppCompatActivity() {
         if (TeamsAuthStore.account(this) != null) TeamsSyncWorker.schedule(this)
     }
 
-    private fun metric(label: String, bg: Int, fg: Int): TextView = HamzaUi.softPill(this, "0\n$label", bg, fg).apply {
-        textSize = 14f; gravity = Gravity.CENTER; minHeight = HamzaUi.dp(this@HomeActivity, 66)
-    }
-
-    private fun weighted(endMargin: Int) = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-        marginEnd = HamzaUi.dp(this@HomeActivity, endMargin)
-    }
-
-    private fun actionCard(title: String, subtitle: String, buttonText: String, action: () -> Unit): View {
-        val card = HamzaUi.card(this)
-        val body = HamzaUi.cardContent(card)
-        body.addView(HamzaUi.title(this, title, 18f))
-        body.addView(HamzaUi.subtitle(this, subtitle), HamzaUi.marginTop(this, 4))
-        body.addView(HamzaUi.secondaryButton(this, buttonText).apply {
-            tag = "home_${title.hashCode()}"; setOnClickListener { action() }
-        }, HamzaUi.marginTop(this, 10))
-        card.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = HamzaUi.dp(this@HomeActivity, 10)
-        }
-        return card
-    }
-
-    private fun showLearningSummary() {
-        val attempts = LearningEvidenceStore(this).attempts()
-        val subjects = attempts.groupingBy { it.subject.ifBlank { "غير محدد" } }.eachCount()
-        val body = if (attempts.isEmpty()) "لسه مفيش محاولات مصوّرة. افتح واجب فيه صفحة وصوّر حل حمزة بعد ما يخلص." else buildString {
-            append("عندنا ${attempts.size} محاولة محفوظة.\n\n")
-            subjects.entries.sortedByDescending { it.value }.forEach { append("${it.key}: ${it.value}\n") }
-            append("\nالتحليل المتقدم للأخطاء المتكررة هيتبني على الأدلة دي بدون تصحيح تلقائي لحمزة.")
-        }
-        AlertDialog.Builder(this).setTitle("ملف تعلّم حمزة").setMessage(body).setPositiveButton("تمام", null).show()
-    }
-
     private fun readFeed(): List<JSONObject> {
         val file = File(filesDir, "school_notifications.jsonl")
         if (!file.exists()) return emptyList()
         return file.readLines().mapNotNull { runCatching { JSONObject(it) }.getOrNull() }
     }
-
-    private fun formatTime(timestamp: Long): String = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(timestamp))
 }
