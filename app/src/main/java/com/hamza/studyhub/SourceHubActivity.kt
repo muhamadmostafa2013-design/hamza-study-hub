@@ -216,10 +216,20 @@ class SourceHubActivity : AppCompatActivity() {
         if (::untisStatus.isInitialized) {
             val last = WebUntisConfigStore.lastSync(this)
             val error = WebUntisConfigStore.lastError(this)
+            val homeworkCount = WebUntisConfigStore.lastHomeworkCount(this)
+            val timetableCount = WebUntisConfigStore.lastTimetableCount(this)
+            val counts = buildList {
+                if (homeworkCount >= 0) add("$homeworkCount واجب")
+                if (timetableCount >= 0) add("$timetableCount حصة")
+            }.joinToString(" • ")
             untisStatus.text = when {
                 !WebUntisConfigStore.isConfigured(this) -> "غير متصل"
-                !error.isNullOrBlank() -> "آخر مزامنة واجهت مشكلة: ${error.take(120)}"
-                last > 0 -> "متصل • آخر مزامنة ${formatTime(last)}"
+                !error.isNullOrBlank() -> buildString {
+                    append("آخر مزامنة واجهت مشكلة: ").append(error.take(180))
+                    if (counts.isNotBlank()) append("\nآخر بيانات نجحت: ").append(counts)
+                }
+                last > 0 -> "متصل • آخر مزامنة ${formatTime(last)}" +
+                    if (counts.isNotBlank()) "\n$counts" else ""
                 else -> "متصل • في انتظار أول مزامنة"
             }
         }
