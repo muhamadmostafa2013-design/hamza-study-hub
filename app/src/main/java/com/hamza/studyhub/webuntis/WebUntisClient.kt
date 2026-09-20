@@ -14,9 +14,9 @@ import java.time.format.DateTimeFormatter
 /**
  * WebUntis client for the QR/shared-secret profile used on Hamza's phone.
  *
- * The QR login establishes a WebUntis session, then exchanges that session for the
- * current Bearer token used by WebUntis REST endpoints. Keeping both cookie + Bearer
- * makes this compatible with the mixed WebUntis API surface used in 2026.
+ * QR/secret authentication is session-cookie based. Some newer WebUntis REST
+ * endpoints also accept a Bearer token, so we use it when the server exposes one,
+ * but never make it mandatory for homework or the classic timetable API.
  */
 class WebUntisClient(private val config: WebUntisConfig) {
 
@@ -48,7 +48,7 @@ class WebUntisClient(private val config: WebUntisConfig) {
         val jsessionId: String,
         val schoolNameCookie: String?,
         val bearerToken: String,
-        val profile: JSONObject
+        val loginProfile: JSONObject
     ) {
         val cookieHeader: String
             get() = buildList {
@@ -57,7 +57,11 @@ class WebUntisClient(private val config: WebUntisConfig) {
             }.joinToString("; ")
     }
 
-    private data class Identity(val personId: Long, val personType: Int)
+    private data class Identity(
+        val personId: Long,
+        val personType: Int,
+        val klasseId: Long? = null
+    )
 
     @Volatile
     private var cachedSession: Session? = null
@@ -72,43 +76,202 @@ class WebUntisClient(private val config: WebUntisConfig) {
 
     fun fetchOwnTimetable(start: LocalDate, end: LocalDate): List<TimetableEntry> {
         val session = authenticatedSession()
-        val identity = extractIdentity(session.profile)
-            ?: runCatching { extractIdentity(fetchUserData(session)) }.getOrNull()
+        val identity = resolveIdentity(session)
             ?: throw IllegalStateException("WebUntis لم يرجع هوية الطالب")
 
-        // This is the timetable endpoint used by current WebUntis builds.
-        val startIso = start.format(DateTimeFormatter.ISO_LOCAL_DATE)
-        val endIso = end.format(DateTimeFormatter.ISO_LOCAL_DATE)
-        val endpoint =
-            "${serverBase()}WebUntis/api/rest/view/v1/timetable/entries" +
-                "?resourceType=STUDENT&resources=${identity.personId}" +
-                "&start=$startIso&end=$endIso&format=2&timetableType=MY_TIMETABLE&layout=START_TIME"
-
-        val modern = runCatching {
-            parseModernTimetable(getJson(endpoint, session))
+        // 1) Current REST timetable. Some servers expose this for personal student views.
+        val modernStudent = runCatching {
+            fetchModernTimetable(
+                session = session,
+                resourceType = "STUDENT",
+                resourceId = identity.personId,
+                start = start,
+                end = end,
+                timetableType = "MY_TIMETABLE"
+            )
+        }
+        if (modernStudent.isSuccess && modernStudent.getOrThrow().isNotEmpty()) {
+            return modernStudent.getOrThrow()
         }
 
-        if (modern.isSuccess && modern.getOrThrow().isNotEmpty()) {
-            return modern.getOrThrow()
+        // 2) Classic JSON-RPC timetable is the proven fallback for secret/QR sessions.
+        val classicStudent = runCatching {
+            fetchClassicTimetable(
+                session = session,
+                elementId = identity.personId,
+                elementType = identity.personType,
+                start = start,
+                end = end
+            )
+        }
+        if (classicStudent.isSuccess && classicStudent.getOrThrow().isNotEmpty()) {
+            return classicStudent.getOrThrow()
         }
 
-        // Some schools still expose the classic timetable more reliably. Keep it as a
-        // compatibility fallback, but with the correct params.options structure.
-        val classic = runCatching {
-            fetchClassicTimetable(session, identity, start, end)
+        // 3) A few schools expose only the class timetable for student accounts.
+        // Secret login can usually provide klasseId via daytimetable/config.
+        identity.klasseId?.takeIf { it > 0 }?.let { klasseId ->
+            val modernClass = runCatching {
+                fetchModernTimetable(
+                    session = session,
+                    resourceType = "CLASS",
+                    resourceId = klasseId,
+                    start = start,
+                    end = end,
+                    timetableType = "STANDARD"
+                )
+            }
+            if (modernClass.isSuccess && modernClass.getOrThrow().isNotEmpty()) {
+                return modernClass.getOrThrow()
+            }
+
+            val classicClass = runCatching {
+                fetchClassicTimetable(
+                    session = session,
+                    elementId = klasseId,
+                    elementType = 1,
+                    start = start,
+                    end = end
+                )
+            }
+            if (classicClass.isSuccess && classicClass.getOrThrow().isNotEmpty()) {
+                return classicClass.getOrThrow()
+            }
         }
 
-        return when {
-            classic.isSuccess && classic.getOrThrow().isNotEmpty() -> classic.getOrThrow()
-            modern.isSuccess -> modern.getOrThrow()
-            classic.isSuccess -> classic.getOrThrow()
-            else -> throw modern.exceptionOrNull()
-                ?: classic.exceptionOrNull()
-                ?: IllegalStateException("تعذر قراءة جدول WebUntis")
+        // An empty timetable can be legitimate (holiday/weekend), so only throw when
+        // both student paths actually failed. Otherwise return the verified empty result.
+        if (modernStudent.isFailure && classicStudent.isFailure) {
+            throw IllegalStateException(
+                "تعذر قراءة جدول WebUntis: " +
+                    listOfNotNull(
+                        modernStudent.exceptionOrNull()?.message,
+                        classicStudent.exceptionOrNull()?.message
+                    ).joinToString(" • ")
+            )
         }
+
+        return classicStudent.getOrNull()
+            ?: modernStudent.getOrNull()
+            ?: emptyList()
     }
 
-    private fun fetchModernTimetableNotUsed() = Unit
+    private fun resolveIdentity(session: Session): Identity? {
+        extractIdentity(session.loginProfile)?.let { loginIdentity ->
+            val klasse = runCatching { fetchKlasseId(session) }.getOrNull()
+            return loginIdentity.copy(klasseId = klasse)
+        }
+
+        runCatching { fetchAppConfig(session) }.getOrNull()?.let { appConfig ->
+            extractIdentityFromAppConfig(appConfig)?.let { appIdentity ->
+                val klasse = appIdentity.klasseId ?: runCatching { fetchKlasseId(session) }.getOrNull()
+                return appIdentity.copy(klasseId = klasse)
+            }
+        }
+
+        runCatching { fetchUserData(session) }.getOrNull()?.let { userData ->
+            extractIdentity(userData)?.let { appIdentity ->
+                val klasse = runCatching { fetchKlasseId(session) }.getOrNull()
+                return appIdentity.copy(klasseId = klasse)
+            }
+        }
+
+        return null
+    }
+
+    private fun fetchAppConfig(session: Session): JSONObject {
+        return getJson("${serverBase()}WebUntis/api/app/config", session)
+    }
+
+    private fun fetchKlasseId(session: Session): Long? {
+        val root = getJson("${serverBase()}WebUntis/api/daytimetable/config", session)
+        val data = root.optJSONObject("data") ?: root
+        return data.optLong("klasseId", Long.MIN_VALUE)
+            .takeIf { it != Long.MIN_VALUE && it > 0 }
+    }
+
+    private fun extractIdentityFromAppConfig(root: JSONObject): Identity? {
+        val data = root.optJSONObject("data") ?: root
+        val user = data.optJSONObject("loginServiceConfig")
+            ?.optJSONObject("user")
+            ?: return null
+
+        val personId = user.optLong("personId", Long.MIN_VALUE)
+        if (personId <= 0 || personId == Long.MIN_VALUE) return null
+
+        val persons = user.optJSONArray("persons") ?: JSONArray()
+        var personType = 5
+        for (i in 0 until persons.length()) {
+            val person = persons.optJSONObject(i) ?: continue
+            if (person.optLong("id", Long.MIN_VALUE) == personId) {
+                personType = person.optInt("type", 5)
+                break
+            }
+        }
+
+        return Identity(personId = personId, personType = personType)
+    }
+
+    private fun fetchUserData(session: Session): JSONObject {
+        val root = getJson("${serverBase()}WebUntis/api/rest/view/v1/app/data", session)
+        return root.optJSONObject("user")
+            ?: root.optJSONObject("data")?.optJSONObject("user")
+            ?: throw IllegalStateException("تعذر قراءة بيانات الطالب من WebUntis")
+    }
+
+    private fun extractIdentity(root: JSONObject): Identity? {
+        val personId = root.optLong("personId", Long.MIN_VALUE)
+        if (personId > 0 && personId != Long.MIN_VALUE) {
+            return Identity(
+                personId = personId,
+                personType = root.optInt("personType", 5),
+                klasseId = root.optLong("klasseId", Long.MIN_VALUE)
+                    .takeIf { it != Long.MIN_VALUE && it > 0 }
+            )
+        }
+
+        root.optJSONObject("person")?.let { person ->
+            val id = person.optLong("id", Long.MIN_VALUE)
+            if (id > 0 && id != Long.MIN_VALUE) {
+                return Identity(
+                    personId = id,
+                    personType = person.optInt("type", root.optInt("personType", 5))
+                )
+            }
+        }
+
+        listOf("user", "userData", "data", "student", "profile").forEach { key ->
+            root.optJSONObject(key)?.let { child ->
+                extractIdentity(child)?.let { return it }
+            }
+        }
+
+        val keys = root.keys()
+        while (keys.hasNext()) {
+            val value = root.opt(keys.next())
+            if (value is JSONObject) {
+                extractIdentity(value)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun fetchModernTimetable(
+        session: Session,
+        resourceType: String,
+        resourceId: Long,
+        start: LocalDate,
+        end: LocalDate,
+        timetableType: String
+    ): List<TimetableEntry> {
+        val endpoint =
+            "${serverBase()}WebUntis/api/rest/view/v1/timetable/entries" +
+                "?resourceType=$resourceType&resources=$resourceId" +
+                "&start=${start.format(DateTimeFormatter.ISO_LOCAL_DATE)}" +
+                "&end=${end.format(DateTimeFormatter.ISO_LOCAL_DATE)}" +
+                "&format=2&timetableType=$timetableType&layout=START_TIME"
+        return parseModernTimetable(getJson(endpoint, session))
+    }
 
     private fun parseModernTimetable(root: JSONObject): List<TimetableEntry> {
         val days = root.optJSONArray("days")
@@ -120,8 +283,7 @@ class WebUntisClient(private val config: WebUntisConfig) {
 
         for (d in 0 until days.length()) {
             val day = days.optJSONObject(d) ?: continue
-            val dateRaw = day.optString("date")
-            val date = dateRaw.replace("-", "").toIntOrNull() ?: continue
+            val date = day.optString("date").replace("-", "").toIntOrNull() ?: continue
             val entries = day.optJSONArray("gridEntries") ?: JSONArray()
 
             for (i in 0 until entries.length()) {
@@ -137,7 +299,11 @@ class WebUntisClient(private val config: WebUntisConfig) {
                 val teachers = namesForType(entry, "TEACHER").joinToString(", ")
                 val rooms = namesForType(entry, "ROOM").joinToString(", ")
                 val ids = entry.optJSONArray("ids")
-                val id = ids?.optLong(0, Long.MIN_VALUE) ?: Long.MIN_VALUE
+                val id = if (ids != null && ids.length() > 0) {
+                    ids.optLong(0)
+                } else {
+                    Long.MIN_VALUE
+                }
                 val substitution = entry.optString("substitutionText")
                     .ifBlank { entry.optString("lessonText") }
                 val cancelled = entry.optString("status").equals("CANCELLED", true)
@@ -187,15 +353,18 @@ class WebUntisClient(private val config: WebUntisConfig) {
 
     private fun fetchClassicTimetable(
         session: Session,
-        identity: Identity,
+        elementId: Long,
+        elementType: Int,
         start: LocalDate,
         end: LocalDate
     ): List<TimetableEntry> {
         val formatter = DateTimeFormatter.BASIC_ISO_DATE
         val endpoint =
             "${serverBase()}WebUntis/jsonrpc.do?school=${URLEncoder.encode(config.school, StandardCharsets.UTF_8.name())}"
+
         val options = JSONObject()
-            .put("element", JSONObject().put("id", identity.personId).put("type", identity.personType))
+            .put("id", System.currentTimeMillis())
+            .put("element", JSONObject().put("id", elementId).put("type", elementType))
             .put("startDate", start.format(formatter).toInt())
             .put("endDate", end.format(formatter).toInt())
             .put("onlyBaseTimetable", false)
@@ -205,10 +374,10 @@ class WebUntisClient(private val config: WebUntisConfig) {
             .put("showLsText", true)
             .put("showLsNumber", true)
             .put("showStudentgroup", true)
-            .put("klasseFields", JSONArray().put("id").put("name").put("longname"))
-            .put("roomFields", JSONArray().put("id").put("name").put("longname"))
-            .put("subjectFields", JSONArray().put("id").put("name").put("longname"))
-            .put("teacherFields", JSONArray().put("id").put("name").put("longname"))
+            .put("klasseFields", JSONArray().put("id").put("name").put("longname").put("externalkey"))
+            .put("roomFields", JSONArray().put("id").put("name").put("longname").put("externalkey"))
+            .put("subjectFields", JSONArray().put("id").put("name").put("longname").put("externalkey"))
+            .put("teacherFields", JSONArray().put("id").put("name").put("longname").put("externalkey"))
 
         val body = JSONObject()
             .put("id", "HamzaStudyHubTimetable")
@@ -234,44 +403,6 @@ class WebUntisClient(private val config: WebUntisConfig) {
         }.sortedWith(compareBy<TimetableEntry> { it.date }.thenBy { it.startTime })
     }
 
-    private fun fetchUserData(session: Session): JSONObject {
-        val endpoint = "${serverBase()}WebUntis/api/rest/view/v1/app/data"
-        val root = getJson(endpoint, session)
-        return root.optJSONObject("user")
-            ?: root.optJSONObject("data")?.optJSONObject("user")
-            ?: throw IllegalStateException("تعذر قراءة بيانات الطالب من WebUntis")
-    }
-
-    private fun extractIdentity(root: JSONObject): Identity? {
-        val personId = root.optLong("personId", Long.MIN_VALUE)
-        if (personId > 0 && personId != Long.MIN_VALUE) {
-            return Identity(personId, root.optInt("personType", 5))
-        }
-
-        // Current app/data shape: user.person.id
-        root.optJSONObject("person")?.let { person ->
-            val id = person.optLong("id", Long.MIN_VALUE)
-            if (id > 0 && id != Long.MIN_VALUE) {
-                return Identity(id, root.optInt("personType", 5))
-            }
-        }
-
-        listOf("user", "userData", "data", "student", "profile").forEach { key ->
-            root.optJSONObject(key)?.let { child ->
-                extractIdentity(child)?.let { return it }
-            }
-        }
-
-        val keys = root.keys()
-        while (keys.hasNext()) {
-            val value = root.opt(keys.next())
-            if (value is JSONObject) {
-                extractIdentity(value)?.let { return it }
-            }
-        }
-        return null
-    }
-
     private fun firstElementName(array: JSONArray?): String {
         val item = array?.optJSONObject(0) ?: return ""
         return item.optString("longname")
@@ -294,14 +425,22 @@ class WebUntisClient(private val config: WebUntisConfig) {
         val school = URLEncoder.encode(config.school, StandardCharsets.UTF_8.name())
         val endpoint =
             "${serverBase()}WebUntis/jsonrpc_intern.do?m=getUserData2017&school=$school&v=i2.2"
-        val auth = JSONObject()
-            .put("user", config.user)
-            .put("otp", otp)
-            .put("clientTime", now)
+
         val requestBody = JSONObject()
             .put("id", "HamzaStudyHub")
             .put("method", "getUserData2017")
-            .put("params", JSONArray().put(JSONObject().put("auth", auth)))
+            .put(
+                "params",
+                JSONArray().put(
+                    JSONObject().put(
+                        "auth",
+                        JSONObject()
+                            .put("clientTime", now)
+                            .put("user", config.user)
+                            .put("otp", otp)
+                    )
+                )
+            )
             .put("jsonrpc", "2.0")
 
         val connection = openConnection(endpoint).apply {
@@ -317,7 +456,7 @@ class WebUntisClient(private val config: WebUntisConfig) {
         response.optJSONObject("error")?.let {
             error(it.optString("message").ifBlank { "تعذر تسجيل الدخول إلى WebUntis" })
         }
-        val result = response.optJSONObject("result") ?: JSONObject()
+
         val cookies = connection.headerFields
             .filterKeys { it?.equals("Set-Cookie", true) == true }
             .values
@@ -326,31 +465,33 @@ class WebUntisClient(private val config: WebUntisConfig) {
         val jsession = extractCookie(cookies, "JSESSIONID")
             ?: error("WebUntis لم يرجع جلسة تسجيل دخول")
         val schoolCookie = extractCookie(cookies, "schoolname")
+        val profile = response.optJSONObject("result") ?: JSONObject()
         connection.disconnect()
 
-        val provisional = Session(
+        val cookieSession = Session(
             jsessionId = jsession,
             schoolNameCookie = schoolCookie,
             bearerToken = "",
-            profile = result
+            loginProfile = profile
         )
-        val token = fetchBearerToken(provisional)
-        return provisional.copy(bearerToken = token)
+
+        // Bearer token is an optional optimization/compatibility path. Secret sessions
+        // remain fully usable with JSESSIONID even when token/new is unavailable.
+        val bearer = runCatching { fetchBearerToken(cookieSession) }.getOrDefault("")
+        return cookieSession.copy(bearerToken = bearer)
     }
 
     private fun fetchBearerToken(session: Session): String {
-        val endpoint = "${serverBase()}WebUntis/api/token/new"
-        val connection = openConnection(endpoint).apply {
+        val connection = openConnection("${serverBase()}WebUntis/api/token/new").apply {
             requestMethod = "GET"
             setRequestProperty("Cookie", session.cookieHeader)
             setRequestProperty("Accept", "text/plain, application/json")
         }
         val token = readResponse(connection).trim().trim('"')
         connection.disconnect()
-        if (token.isBlank() || token.startsWith("{")) {
-            error("WebUntis لم يرجع رمز الوصول الحديث")
-        }
-        return token
+        return token.takeIf {
+            it.isNotBlank() && !it.startsWith("{") && !it.startsWith("<")
+        } ?: error("WebUntis لم يرجع Bearer token")
     }
 
     private fun getJson(endpoint: String, session: Session): JSONObject {
@@ -468,6 +609,8 @@ class WebUntisClient(private val config: WebUntisConfig) {
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", "HamzaStudyHub/0.5 Android")
             setRequestProperty("Accept", "application/json, text/plain, */*")
+            setRequestProperty("X-Requested-With", "XMLHttpRequest")
+            setRequestProperty("Cache-Control", "no-cache")
         }
 
     private fun readResponse(connection: HttpURLConnection): String {
