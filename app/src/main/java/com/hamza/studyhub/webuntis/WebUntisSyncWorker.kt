@@ -23,27 +23,67 @@ import java.util.concurrent.TimeUnit
 class WebUntisSyncWorker(appContext: Context, workerParams: WorkerParameters) : Worker(appContext, workerParams) {
     override fun doWork(): Result {
         val config = WebUntisConfigStore.load(applicationContext) ?: return Result.success()
-        return try {
-            val today = LocalDate.now()
-            val client = WebUntisClient(config)
-            val homeworks = client.fetchHomeworks(today.minusDays(14), today.plusDays(45))
-            val timetable = client.fetchOwnTimetable(today, today.plusDays(14))
-            saveTimetable(timetable)
-            val summary = mergeIntoFeed(homeworks, today)
-            WebUntisConfigStore.saveSyncSuccess(applicationContext)
-            if (summary.newCount > 0 || summary.updatedCount > 0) {
-                val parts = buildList {
-                    if (summary.newCount > 0) add("${summary.newCount} واجب جديد")
-                    if (summary.updatedCount > 0) add("${summary.updatedCount} تعديل")
-                    if (summary.attentionCount > 0) add("${summary.attentionCount} يحتاج انتباه")
-                }
-                BackgroundAlert.notify(applicationContext, "Hamza Study Hub • تحديث من Untis", parts.joinToString(" • "), 4101)
-            }
-            Result.success()
-        } catch (e: Exception) {
-            WebUntisConfigStore.saveSyncError(applicationContext, e.message ?: e.javaClass.simpleName)
-            Result.retry()
+        val today = LocalDate.now()
+        val client = WebUntisClient(config)
+
+        // Homework and timetable are deliberately isolated. A timetable API failure must
+        // never stop valid homework from reaching the feed (and vice versa).
+        val homeworkResult = runCatching {
+            client.fetchHomeworks(today.minusDays(14), today.plusDays(45))
         }
+        val timetableResult = runCatching {
+            client.fetchOwnTimetable(today, today.plusDays(14))
+        }
+
+        var summary: SyncSummary? = null
+        homeworkResult.onSuccess { homeworks ->
+            summary = mergeIntoFeed(homeworks, today)
+            WebUntisConfigStore.saveCounts(applicationContext, homeworkCount = homeworks.size)
+        }
+        timetableResult.onSuccess { timetable ->
+            saveTimetable(timetable)
+            WebUntisConfigStore.saveCounts(applicationContext, timetableCount = timetable.size)
+        }
+
+        val anySuccess = homeworkResult.isSuccess || timetableResult.isSuccess
+        val failures = buildList {
+            homeworkResult.exceptionOrNull()?.let {
+                add("الواجبات: ${it.message ?: it.javaClass.simpleName}")
+            }
+            timetableResult.exceptionOrNull()?.let {
+                add("الجدول: ${it.message ?: it.javaClass.simpleName}")
+            }
+        }
+
+        if (anySuccess) {
+            WebUntisConfigStore.saveSyncSuccess(applicationContext)
+            if (failures.isNotEmpty()) {
+                WebUntisConfigStore.saveSyncError(applicationContext, failures.joinToString(" • "))
+            }
+        } else {
+            WebUntisConfigStore.saveSyncError(
+                applicationContext,
+                failures.joinToString(" • ").ifBlank { "تعذر مزامنة WebUntis" }
+            )
+        }
+
+        summary?.let { s ->
+            if (s.newCount > 0 || s.updatedCount > 0) {
+                val parts = buildList {
+                    if (s.newCount > 0) add("${s.newCount} واجب جديد")
+                    if (s.updatedCount > 0) add("${s.updatedCount} تعديل")
+                    if (s.attentionCount > 0) add("${s.attentionCount} يحتاج انتباه")
+                }
+                BackgroundAlert.notify(
+                    applicationContext,
+                    "Hamza Study Hub • تحديث من Untis",
+                    parts.joinToString(" • "),
+                    4101
+                )
+            }
+        }
+
+        return if (anySuccess) Result.success() else Result.retry()
     }
 
     private fun saveTimetable(lessons: List<WebUntisClient.TimetableEntry>) {
