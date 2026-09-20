@@ -52,6 +52,10 @@ object TeamsAuthManager {
                                             activity.applicationContext,
                                             TeamsGraphClient(authenticationResult.accessToken)
                                         ).sync()
+                                        TeamsAuthStore.saveAssignmentCount(
+                                            activity,
+                                            summary.discovered + summary.updated + summary.unchanged
+                                        )
                                         TeamsAuthStore.saveSyncSuccess(activity)
                                         TeamsSyncWorker.schedule(activity.applicationContext)
                                         summary

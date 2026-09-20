@@ -21,6 +21,7 @@ object TeamsAuthStore {
     private const val KEY_LAST_SYNC = "last_sync"
     private const val KEY_LAST_ERROR = "last_error"
     private const val KEY_ACCOUNT = "account"
+    private const val KEY_ASSIGNMENT_COUNT = "assignment_count"
 
     // Public Entra application metadata. These values are not credentials or secrets.
     private const val DEFAULT_CLIENT_ID = "0a95569d-2b7a-45c3-a527-a3ae5ba7c258"
@@ -64,6 +65,16 @@ object TeamsAuthStore {
             putString(KEY_LAST_ERROR, message.take(300))
         }
     }
+
+    fun saveAssignmentCount(context: Context, count: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putInt(KEY_ASSIGNMENT_COUNT, count)
+        }
+    }
+
+    fun lastAssignmentCount(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_ASSIGNMENT_COUNT, -1)
 
     fun lastSync(context: Context): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

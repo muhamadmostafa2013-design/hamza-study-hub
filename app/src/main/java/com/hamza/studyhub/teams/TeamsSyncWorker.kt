@@ -34,6 +34,10 @@ class TeamsSyncWorker(
                 TeamsGraphClient(token)
             ).sync()
 
+            TeamsAuthStore.saveAssignmentCount(
+                applicationContext,
+                summary.discovered + summary.updated + summary.unchanged
+            )
             TeamsAuthStore.saveSyncSuccess(applicationContext)
 
             if (summary.discovered > 0 || summary.updated > 0) {

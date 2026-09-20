@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
@@ -108,7 +110,13 @@ class SourceHubActivity : AppCompatActivity() {
                     setOnClickListener {
                         if (WebUntisConfigStore.isConfigured(this@SourceHubActivity)) {
                             WebUntisSyncWorker.syncNow(this@SourceHubActivity)
-                            untisStatus.text = getString(R.string.untis_sync_requested)
+                            untisStatus.text = "⏳ جاري قراءة الواجبات والجدول من WebUntis..."
+                            val handler = Handler(Looper.getMainLooper())
+                            listOf(3_000L, 8_000L, 15_000L, 25_000L).forEach { delay ->
+                                handler.postDelayed({
+                                    if (!isFinishing && !isDestroyed) refresh()
+                                }, delay)
+                            }
                         } else {
                             startActivity(Intent(this@SourceHubActivity, LaunchActivity::class.java))
                         }
@@ -216,10 +224,20 @@ class SourceHubActivity : AppCompatActivity() {
         if (::untisStatus.isInitialized) {
             val last = WebUntisConfigStore.lastSync(this)
             val error = WebUntisConfigStore.lastError(this)
+            val homeworkCount = WebUntisConfigStore.lastHomeworkCount(this)
+            val timetableCount = WebUntisConfigStore.lastTimetableCount(this)
+            val counts = buildList {
+                if (homeworkCount >= 0) add("$homeworkCount واجب")
+                if (timetableCount >= 0) add("$timetableCount حصة")
+            }.joinToString(" • ")
             untisStatus.text = when {
                 !WebUntisConfigStore.isConfigured(this) -> "غير متصل"
-                !error.isNullOrBlank() -> "آخر مزامنة واجهت مشكلة: ${error.take(120)}"
-                last > 0 -> "متصل • آخر مزامنة ${formatTime(last)}"
+                !error.isNullOrBlank() -> buildString {
+                    append("آخر مزامنة واجهت مشكلة: ").append(error.take(180))
+                    if (counts.isNotBlank()) append("\nآخر بيانات نجحت: ").append(counts)
+                }
+                last > 0 -> "متصل • آخر مزامنة ${formatTime(last)}" +
+                    if (counts.isNotBlank()) "\n$counts" else "\nلم ترجع أعداد بعد"
                 else -> "متصل • في انتظار أول مزامنة"
             }
         }
@@ -227,9 +245,14 @@ class SourceHubActivity : AppCompatActivity() {
             val account = TeamsAuthStore.account(this)
             val last = TeamsAuthStore.lastSync(this)
             val error = TeamsAuthStore.lastError(this)
+            val assignmentCount = TeamsAuthStore.lastAssignmentCount(this)
             teamsStatus.text = when {
-                !error.isNullOrBlank() -> "آخر محاولة: ${error.take(150)}"
-                account != null && last > 0 -> "متصل • آخر Deep Sync ${formatTime(last)}"
+                !error.isNullOrBlank() -> buildString {
+                    append("آخر محاولة: ").append(error.take(180))
+                    if (assignmentCount >= 0) append("\nآخر نتيجة ناجحة: ").append(assignmentCount).append(" Teams Assignments")
+                }
+                account != null && last > 0 -> "متصل • آخر Deep Sync ${formatTime(last)}" +
+                    if (assignmentCount >= 0) "\n$assignmentCount Teams Assignments" else ""
                 account != null -> "الحساب متصل • في انتظار أول Deep Sync"
                 else -> "جاهز لتسجيل دخول حساب حمزة"
             }

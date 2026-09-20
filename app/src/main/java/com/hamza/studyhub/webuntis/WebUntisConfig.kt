@@ -17,6 +17,8 @@ object WebUntisConfigStore {
     private const val KEY_QR = "qr_uri"
     private const val KEY_LAST_SYNC = "last_sync"
     private const val KEY_LAST_ERROR = "last_error"
+    private const val KEY_HOMEWORK_COUNT = "homework_count"
+    private const val KEY_TIMETABLE_COUNT = "timetable_count"
 
     fun parseQr(raw: String): WebUntisConfig? {
         val value = raw.trim()
@@ -82,6 +84,19 @@ object WebUntisConfigStore {
             putString(KEY_LAST_ERROR, message.take(500))
         }
     }
+
+    fun saveCounts(context: Context, homeworkCount: Int? = null, timetableCount: Int? = null) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            homeworkCount?.let { putInt(KEY_HOMEWORK_COUNT, it) }
+            timetableCount?.let { putInt(KEY_TIMETABLE_COUNT, it) }
+        }
+    }
+
+    fun lastHomeworkCount(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_HOMEWORK_COUNT, -1)
+
+    fun lastTimetableCount(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_TIMETABLE_COUNT, -1)
 
     fun lastSync(context: Context): Long =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_LAST_SYNC, 0L)
