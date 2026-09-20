@@ -80,22 +80,8 @@ class WebUntisClient(private val config: WebUntisConfig) {
         val identity = resolveIdentity(session)
             ?: throw IllegalStateException("WebUntis لم يرجع هوية الطالب")
 
-        // 1) Current REST timetable. Some servers expose this for personal student views.
-        val modernStudent = runCatching {
-            fetchModernTimetable(
-                session = session,
-                resourceType = "STUDENT",
-                resourceId = identity.personId,
-                start = start,
-                end = end,
-                timetableType = "MY_TIMETABLE"
-            )
-        }
-        if (modernStudent.isSuccess && modernStudent.getOrThrow().isNotEmpty()) {
-            return modernStudent.getOrThrow()
-        }
-
-        // 2) Classic JSON-RPC timetable is the proven fallback for secret/QR sessions.
+        // Secret/QR login is proven to work with the classic JSON-RPC timetable and
+        // JSESSIONID, so keep that as the primary path.
         val classicStudent = runCatching {
             fetchClassicTimetable(
                 session = session,
@@ -109,23 +95,8 @@ class WebUntisClient(private val config: WebUntisConfig) {
             return classicStudent.getOrThrow()
         }
 
-        // 3) A few schools expose only the class timetable for student accounts.
-        // Secret login can usually provide klasseId via daytimetable/config.
+        // Some student accounts expose only the class timetable.
         identity.klasseId?.takeIf { it > 0 }?.let { klasseId ->
-            val modernClass = runCatching {
-                fetchModernTimetable(
-                    session = session,
-                    resourceType = "CLASS",
-                    resourceId = klasseId,
-                    start = start,
-                    end = end,
-                    timetableType = "STANDARD"
-                )
-            }
-            if (modernClass.isSuccess && modernClass.getOrThrow().isNotEmpty()) {
-                return modernClass.getOrThrow()
-            }
-
             val classicClass = runCatching {
                 fetchClassicTimetable(
                     session = session,
@@ -140,14 +111,46 @@ class WebUntisClient(private val config: WebUntisConfig) {
             }
         }
 
-        // An empty timetable can be legitimate (holiday/weekend), so only throw when
-        // both student paths actually failed. Otherwise return the verified empty result.
-        if (modernStudent.isFailure && classicStudent.isFailure) {
+        // New REST timetable is a compatibility fallback. JWT is fetched lazily only
+        // if we actually need this path, so a slow/disabled token endpoint cannot block
+        // normal homework or classic timetable synchronization.
+        val modernSession = withOptionalBearer(session)
+        val modernStudent = runCatching {
+            fetchModernTimetable(
+                session = modernSession,
+                resourceType = "STUDENT",
+                resourceId = identity.personId,
+                start = start,
+                end = end,
+                timetableType = "MY_TIMETABLE"
+            )
+        }
+        if (modernStudent.isSuccess && modernStudent.getOrThrow().isNotEmpty()) {
+            return modernStudent.getOrThrow()
+        }
+
+        identity.klasseId?.takeIf { it > 0 }?.let { klasseId ->
+            val modernClass = runCatching {
+                fetchModernTimetable(
+                    session = modernSession,
+                    resourceType = "CLASS",
+                    resourceId = klasseId,
+                    start = start,
+                    end = end,
+                    timetableType = "STANDARD"
+                )
+            }
+            if (modernClass.isSuccess && modernClass.getOrThrow().isNotEmpty()) {
+                return modernClass.getOrThrow()
+            }
+        }
+
+        if (classicStudent.isFailure && modernStudent.isFailure) {
             throw IllegalStateException(
                 "تعذر قراءة جدول WebUntis: " +
                     listOfNotNull(
-                        modernStudent.exceptionOrNull()?.message,
-                        classicStudent.exceptionOrNull()?.message
+                        classicStudent.exceptionOrNull()?.message,
+                        modernStudent.exceptionOrNull()?.message
                     ).joinToString(" • ")
             )
         }
@@ -473,17 +476,18 @@ class WebUntisClient(private val config: WebUntisConfig) {
         val profile = response.optJSONObject("result") ?: JSONObject()
         connection.disconnect()
 
-        val cookieSession = Session(
+        return Session(
             jsessionId = jsession,
             schoolNameCookie = schoolCookie,
             bearerToken = "",
             loginProfile = profile
         )
+    }
 
-        // Bearer token is an optional optimization/compatibility path. Secret sessions
-        // remain fully usable with JSESSIONID even when token/new is unavailable.
-        val bearer = runCatching { fetchBearerToken(cookieSession) }.getOrDefault("")
-        return cookieSession.copy(bearerToken = bearer)
+    private fun withOptionalBearer(session: Session): Session {
+        if (session.bearerToken.isNotBlank()) return session
+        val token = runCatching { fetchBearerToken(session) }.getOrDefault("")
+        return if (token.isBlank()) session else session.copy(bearerToken = token)
     }
 
     private fun fetchBearerToken(session: Session): String {
