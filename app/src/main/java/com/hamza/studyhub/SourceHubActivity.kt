@@ -245,9 +245,14 @@ class SourceHubActivity : AppCompatActivity() {
             val account = TeamsAuthStore.account(this)
             val last = TeamsAuthStore.lastSync(this)
             val error = TeamsAuthStore.lastError(this)
+            val assignmentCount = TeamsAuthStore.lastAssignmentCount(this)
             teamsStatus.text = when {
-                !error.isNullOrBlank() -> "آخر محاولة: ${error.take(150)}"
-                account != null && last > 0 -> "متصل • آخر Deep Sync ${formatTime(last)}"
+                !error.isNullOrBlank() -> buildString {
+                    append("آخر محاولة: ").append(error.take(180))
+                    if (assignmentCount >= 0) append("\nآخر نتيجة ناجحة: ").append(assignmentCount).append(" Teams Assignments")
+                }
+                account != null && last > 0 -> "متصل • آخر Deep Sync ${formatTime(last)}" +
+                    if (assignmentCount >= 0) "\n$assignmentCount Teams Assignments" else ""
                 account != null -> "الحساب متصل • في انتظار أول Deep Sync"
                 else -> "جاهز لتسجيل دخول حساب حمزة"
             }
