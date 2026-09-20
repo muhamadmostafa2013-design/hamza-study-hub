@@ -10,6 +10,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Base64
 
 /**
  * WebUntis client for the QR/shared-secret profile used on Hamza's phone.
@@ -468,7 +469,7 @@ class WebUntisClient(private val config: WebUntisConfig) {
 
         val jsession = extractCookie(cookies, "JSESSIONID")
             ?: error("WebUntis لم يرجع جلسة تسجيل دخول")
-        val schoolCookie = extractCookie(cookies, "schoolname")
+        val schoolCookie = extractCookie(cookies, "schoolname") ?: buildSchoolNameCookie()
         val profile = response.optJSONObject("result") ?: JSONObject()
         connection.disconnect()
 
@@ -602,6 +603,13 @@ class WebUntisClient(private val config: WebUntisConfig) {
         return o.optString("longName")
             .ifBlank { o.optString("displayName") }
             .ifBlank { o.optString("name") }
+    }
+
+    private fun buildSchoolNameCookie(): String {
+        val base64 = Base64.getEncoder().encodeToString(
+            config.school.toByteArray(StandardCharsets.UTF_8)
+        )
+        return URLEncoder.encode("_$base64", StandardCharsets.UTF_8.name())
     }
 
     private fun serverBase(): String =
