@@ -105,7 +105,9 @@ jobs:
           "${ANDROID_SDK_ROOT}/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signature.txt
           "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/apkanalyzer" manifest permissions "$APK" | tee apk-permissions.txt
           "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/apkanalyzer" manifest print "$APK" | tee apk-manifest.xml
-          if grep -Eq 'BIND_NOTIFICATION_LISTENER_SERVICE|REQUEST_INSTALL_PACKAGES|SYSTEM_ALERT_WINDOW|BIND_ACCESSIBILITY_SERVICE' apk-manifest.xml apk-permissions.txt; then
+          # REQUEST_INSTALL_PACKAGES is intentionally allowed for the verified self-updater.
+          # Keep blocking notification listeners, overlays and accessibility services.
+          if grep -Eq 'BIND_NOTIFICATION_LISTENER_SERVICE|SYSTEM_ALERT_WINDOW|BIND_ACCESSIBILITY_SERVICE' apk-manifest.xml apk-permissions.txt; then
             echo "Restricted permission/component detected in release APK"
             exit 1
           fi
