@@ -31,6 +31,7 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        AppUpdateManager.resumePendingInstall(this)
         refresh()
     }
 
