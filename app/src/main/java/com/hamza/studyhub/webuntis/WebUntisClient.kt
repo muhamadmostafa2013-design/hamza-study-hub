@@ -213,7 +213,11 @@ class WebUntisClient(private val config: WebUntisConfig) {
     }
 
     private fun fetchUserData(session: Session): JSONObject {
-        val root = getJson("${serverBase()}WebUntis/api/rest/view/v1/app/data", session)
+        val root = getJson(
+            "${serverBase()}WebUntis/api/rest/view/v1/app/data",
+            session,
+            useBearer = true
+        )
         return root.optJSONObject("user")
             ?: root.optJSONObject("data")?.optJSONObject("user")
             ?: throw IllegalStateException("تعذر قراءة بيانات الطالب من WebUntis")
@@ -270,7 +274,7 @@ class WebUntisClient(private val config: WebUntisConfig) {
                 "&start=${start.format(DateTimeFormatter.ISO_LOCAL_DATE)}" +
                 "&end=${end.format(DateTimeFormatter.ISO_LOCAL_DATE)}" +
                 "&format=2&timetableType=$timetableType&layout=START_TIME"
-        return parseModernTimetable(getJson(endpoint, session))
+        return parseModernTimetable(getJson(endpoint, session, useBearer = true))
     }
 
     private fun parseModernTimetable(root: JSONObject): List<TimetableEntry> {
@@ -494,11 +498,15 @@ class WebUntisClient(private val config: WebUntisConfig) {
         } ?: error("WebUntis لم يرجع Bearer token")
     }
 
-    private fun getJson(endpoint: String, session: Session): JSONObject {
+    private fun getJson(
+        endpoint: String,
+        session: Session,
+        useBearer: Boolean = false
+    ): JSONObject {
         val connection = openConnection(endpoint).apply {
             requestMethod = "GET"
             setRequestProperty("Cookie", session.cookieHeader)
-            if (session.bearerToken.isNotBlank()) {
+            if (useBearer && session.bearerToken.isNotBlank()) {
                 setRequestProperty("Authorization", "Bearer ${session.bearerToken}")
             }
         }
@@ -513,9 +521,6 @@ class WebUntisClient(private val config: WebUntisConfig) {
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Cookie", session.cookieHeader)
-            if (session.bearerToken.isNotBlank()) {
-                setRequestProperty("Authorization", "Bearer ${session.bearerToken}")
-            }
         }
         connection.outputStream.use {
             it.write(body.toString().toByteArray(StandardCharsets.UTF_8))
