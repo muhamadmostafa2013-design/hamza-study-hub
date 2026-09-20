@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
@@ -108,7 +110,13 @@ class SourceHubActivity : AppCompatActivity() {
                     setOnClickListener {
                         if (WebUntisConfigStore.isConfigured(this@SourceHubActivity)) {
                             WebUntisSyncWorker.syncNow(this@SourceHubActivity)
-                            untisStatus.text = getString(R.string.untis_sync_requested)
+                            untisStatus.text = "⏳ جاري قراءة الواجبات والجدول من WebUntis..."
+                            val handler = Handler(Looper.getMainLooper())
+                            listOf(3_000L, 8_000L, 15_000L, 25_000L).forEach { delay ->
+                                handler.postDelayed({
+                                    if (!isFinishing && !isDestroyed) refresh()
+                                }, delay)
+                            }
                         } else {
                             startActivity(Intent(this@SourceHubActivity, LaunchActivity::class.java))
                         }
@@ -229,7 +237,7 @@ class SourceHubActivity : AppCompatActivity() {
                     if (counts.isNotBlank()) append("\nآخر بيانات نجحت: ").append(counts)
                 }
                 last > 0 -> "متصل • آخر مزامنة ${formatTime(last)}" +
-                    if (counts.isNotBlank()) "\n$counts" else ""
+                    if (counts.isNotBlank()) "\n$counts" else "\nلم ترجع أعداد بعد"
                 else -> "متصل • في انتظار أول مزامنة"
             }
         }
