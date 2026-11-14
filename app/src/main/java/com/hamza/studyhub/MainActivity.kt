@@ -336,6 +336,24 @@ class MainActivity : AppCompatActivity() {
             ellipsize = android.text.TextUtils.TruncateAt.END
         }, HamzaUi.marginTop(this, 9))
 
+        // Provenance is useful at a glance; do not present imported text as verified school data.
+        val trustLabel = when (item.optString("evidenceTrust")) {
+            "OFFICIAL" -> "معلومة من النظام المدرسي"
+            "OFFICIAL_SIGNAL" -> "من إشعار المدرسة"
+            "COMMUNITY" -> "معلومة غير رسمية"
+            "USER_IMPORTED" -> "مشاركة يدوية"
+            else -> "المصدر غير مؤكد"
+        }
+        val visibleSource = when {
+            source.equals("Teams", true) -> "Teams"
+            source.equals("Untis", true) -> "WebUntis"
+            else -> source
+        }
+        content.addView(HamzaUi.subtitle(this, "$visibleSource • $trustLabel").apply {
+            tag = "assignment_provenance_$idTag"
+            textSize = 12.5f
+        }, HamzaUi.marginTop(this, 4))
+
         if (needsReview) {
             val shortReason = HomeworkScreenPolicy.preview(
                 item.optString("attentionReason").ifBlank { "راجع التفاصيل في المصدر الرسمي." }, 90
