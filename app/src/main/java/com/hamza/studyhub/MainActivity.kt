@@ -62,7 +62,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sourcesRow: LinearLayout
     private lateinit var sourcesDetailsText: TextView
     private lateinit var homeworkScroll: ScrollView
-    private var feedMode = FeedMode.ALL
+    private var feedMode = FeedMode.TO_DO
+    private val expandedDetails = mutableSetOf<String>()
 
     private val bookStore by lazy { BookLibraryStore(this) }
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -139,6 +140,7 @@ class MainActivity : AppCompatActivity() {
             tag = "feed_todo"
             setOnClickListener {
                 feedMode = FeedMode.TO_DO
+                homeworkScroll.scrollTo(0, 0)
                 refreshFeed()
             }
         }
@@ -146,6 +148,7 @@ class MainActivity : AppCompatActivity() {
             tag = "feed_attention"
             setOnClickListener {
                 feedMode = FeedMode.ATTENTION
+                homeworkScroll.scrollTo(0, 0)
                 refreshFeed()
             }
         }
@@ -153,6 +156,7 @@ class MainActivity : AppCompatActivity() {
             tag = "feed_all"
             setOnClickListener {
                 feedMode = FeedMode.ALL
+                homeworkScroll.scrollTo(0, 0)
                 refreshFeed()
             }
         }
@@ -270,6 +274,9 @@ class MainActivity : AppCompatActivity() {
             .ifBlank { originalTitle.substringAfter("•", "").trim() }
         val heading = if (homework) subject.ifBlank { originalTitle } else originalTitle
         val idTag = item.optLong("timestamp")
+        val detailKey = item.optString("externalId")
+            .ifBlank { item.optString("contentFingerprint") }
+            .ifBlank { idTag.toString() }
         val due = HomeworkScreenPolicy.dueStatus(item.optInt("dueDate", 0))
         val referenceDetected = item.optBoolean("bookReferenceDetected", false)
         val resolved = if (referenceDetected) BookAssignmentResolver(bookStore)
@@ -409,7 +416,7 @@ class MainActivity : AppCompatActivity() {
         // Keep metadata, long source text and administrative actions one tap away.
         val details = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
+            visibility = if (detailKey in expandedDetails) View.VISIBLE else View.GONE
             tag = "assignment_details_panel_$idTag"
         }
         if (bodyText.isNotBlank() && preview != bodyText.replace(Regex("\\s+"), " ").trim()) {
@@ -461,12 +468,15 @@ class MainActivity : AppCompatActivity() {
             listOf(sourceLabel, timeText).filter { it.isNotBlank() }.joinToString(" • ")
         ), HamzaUi.marginTop(this, 9))
 
-        content.addView(HamzaUi.secondaryButton(this, "عرض التفاصيل").apply {
+        content.addView(HamzaUi.secondaryButton(this,
+            if (detailKey in expandedDetails) "إخفاء التفاصيل" else "عرض التفاصيل"
+        ).apply {
             tag = "assignment_details_$idTag"
             textSize = 13f
             setOnClickListener {
                 val show = details.visibility != View.VISIBLE
                 details.visibility = if (show) View.VISIBLE else View.GONE
+                if (show) expandedDetails.add(detailKey) else expandedDetails.remove(detailKey)
                 text = if (show) "إخفاء التفاصيل" else "عرض التفاصيل"
             }
         }, HamzaUi.marginTop(this, 8))
