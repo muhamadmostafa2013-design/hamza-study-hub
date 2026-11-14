@@ -26,12 +26,13 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(buildScreen())
         scheduleConnectedSources()
-        AppUpdateManager.check(this, silentIfCurrent = true)
+        AppUpdateManager.schedule(this)
     }
 
     override fun onResume() {
         super.onResume()
         AppUpdateManager.resumePendingInstall(this)
+        AppUpdateManager.offerReadyUpdate(this)
         refresh()
     }
 

@@ -15,6 +15,7 @@ on:
   push:
     branches:
       - 'feature/hamza-study-plan'
+      - 'release/**'
     tags:
       - 'v*'
 
@@ -130,7 +131,7 @@ jobs:
             apk-signature.txt
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release) || (github.event_name == 'push' && github.ref == 'refs/heads/feature/hamza-study-plan' && contains(github.event.head_commit.message, '[release]'))
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release) || (github.event_name == 'push' && (github.ref == 'refs/heads/feature/hamza-study-plan' || startsWith(github.ref, 'refs/heads/release/')) && contains(github.event.head_commit.message, '[release]'))
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
