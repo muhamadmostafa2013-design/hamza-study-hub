@@ -623,7 +623,7 @@ class WebUntisClient(private val config: WebUntisConfig) {
         (URL(endpoint).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 20_000
-            instanceFollowRedirects = true
+            instanceFollowRedirects = false
             setRequestProperty("User-Agent", "HamzaStudyHub/0.5 Android")
             setRequestProperty("Accept", "application/json, text/plain, */*")
             setRequestProperty("X-Requested-With", "XMLHttpRequest")

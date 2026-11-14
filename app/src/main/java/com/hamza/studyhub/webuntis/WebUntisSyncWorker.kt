@@ -12,6 +12,7 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.hamza.studyhub.agents.AgentOrchestrator
 import com.hamza.studyhub.monitor.BackgroundAlert
+import com.hamza.studyhub.sources.SchoolFeedStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -103,8 +104,7 @@ class WebUntisSyncWorker(appContext: Context, workerParams: WorkerParameters) : 
     private data class SyncSummary(val newCount: Int, val updatedCount: Int, val attentionCount: Int)
 
     private fun mergeIntoFeed(homeworks: List<WebUntisClient.Homework>, today: LocalDate): SyncSummary {
-        val file = File(applicationContext.filesDir, "school_notifications.jsonl")
-        val existing = if (file.exists()) file.readLines().mapNotNull { runCatching { JSONObject(it) }.getOrNull() }.toMutableList() else mutableListOf()
+        return SchoolFeedStore.edit(applicationContext) { existing ->
         val byExternalId = existing.mapIndexedNotNull { index, item -> item.optString("externalId").takeIf { it.isNotBlank() }?.let { it to index } }.toMap().toMutableMap()
         var newCount = 0; var updatedCount = 0; var attentionCount = 0
         homeworks.forEach { hw ->
@@ -124,11 +124,12 @@ class WebUntisSyncWorker(appContext: Context, workerParams: WorkerParameters) : 
                 put("imported", true); put("importMethod", "WebUntis Auto Sync"); put("externalId", externalId); put("homeworkId", hw.id); put("lessonId", hw.lessonId); put("assignedDate", hw.assignedDate); put("dueDate", hw.dueDate)
                 put("completed", hw.completed); put("subject", subject); put("teacher", hw.teacher); put("syncSignature", signature); put("syncChange", syncChange); put("needsAttention", needsAttention); put("attentionReason", attentionReason); put("attentionResolved", attentionResolved)
             }
+            previous?.optJSONArray("taskChecklist")?.let { rawItem.put("taskChecklist", it) }
             val item = AgentOrchestrator.enrich(rawItem); if (item.optBoolean("needsAttention", false) && !attentionResolved) attentionCount++
             if (previousIndex == null) { existing.add(item); byExternalId[externalId] = existing.lastIndex } else existing[previousIndex] = item
         }
-        file.writeText(existing.joinToString("\n") { it.toString() } + if (existing.isNotEmpty()) "\n" else "")
-        return SyncSummary(newCount, updatedCount, attentionCount)
+        SyncSummary(newCount, updatedCount, attentionCount)
+        }
     }
 
     private fun parseUntisDate(value: Int): LocalDate? = if (value <= 0) null else runCatching { LocalDate.parse(value.toString(), DateTimeFormatter.BASIC_ISO_DATE) }.getOrNull()
