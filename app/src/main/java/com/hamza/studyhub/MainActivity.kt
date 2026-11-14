@@ -193,7 +193,7 @@ class MainActivity : AppCompatActivity() {
         scrollContent.addView(syncStatusText, HamzaUi.marginTop(this, 10))
 
         feedScrollView = ScrollView(this).apply {
-            fillViewport = false
+            isFillViewport = false
             addView(scrollContent)
         }
         root.addView(feedScrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))

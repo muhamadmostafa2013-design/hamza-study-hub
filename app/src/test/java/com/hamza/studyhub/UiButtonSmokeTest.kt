@@ -13,6 +13,7 @@ import com.hamza.studyhub.teams.TeamsConnectionActivity
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -21,6 +22,8 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [32])
@@ -51,8 +54,12 @@ class UiButtonSmokeTest {
     @Test fun homeworkFeedDynamicButtonsAreAllWired() {
         seedAttentionHomework()
         val activity = launch(MainActivity::class.java)
+        val initialButtons = allButtons(activity.window.decorView)
+        assertTrue(initialButtons.any { it.tag?.toString()?.startsWith("assignment_source_") == true })
+        assertFalse(initialButtons.any { it.tag?.toString()?.startsWith("assignment_capture_") == true })
+        initialButtons.first { it.tag?.toString()?.startsWith("assignment_expand_") == true }.performClick()
         val buttons = allButtons(activity.window.decorView)
-        assertTrue("Expected dynamic homework actions", buttons.size >= 6)
+        assertTrue("Expected actions inside expanded details", buttons.size >= 6)
         buttons.forEach { button ->
             assertTrue("Unwired button: ${button.text} tag=${button.tag}", button.hasOnClickListeners())
         }
@@ -74,12 +81,39 @@ class UiButtonSmokeTest {
     @Test fun resolveAttentionButtonPersistsResolvedState() {
         seedAttentionHomework()
         val activity = launch(MainActivity::class.java)
+        allButtons(activity.window.decorView).first { it.tag?.toString()?.startsWith("assignment_expand_") == true }.performClick()
         val resolve = allButtons(activity.window.decorView)
             .first { it.tag?.toString()?.startsWith("assignment_resolve_") == true }
         assertTrue(resolve.performClick())
         val saved = feedFile.readLines().map { JSONObject(it) }.first()
         assertTrue(saved.optBoolean("attentionResolved", false))
         assertFalse(saved.optBoolean("isNew", true))
+    }
+
+    @Test fun screenHidesLongInstructionsUntilDetailsOpened() {
+        seedAttentionHomework()
+        val activity = launch(MainActivity::class.java)
+        assertTrue("Must show a short summary", tagged(activity.window.decorView, "assignment_preview_").isNotEmpty())
+        assertTrue("Full school text is not shown by default",
+            tagged(activity.window.decorView, "assignment_full_text_").isEmpty())
+        allButtons(activity.window.decorView).first { it.tag?.toString()?.startsWith("assignment_expand_") == true }.performClick()
+        assertEquals(1, tagged(activity.window.decorView, "assignment_full_text_").size)
+    }
+
+    @Test fun defaultScreenShowsHomeworkRatherThanSchoolAnnouncements() {
+        seedAttentionHomework()
+        feedFile.appendText(JSONObject().apply {
+            put("source", "Teams")
+            put("title", "Mitteilung")
+            put("text", "Information about the school trip.")
+            put("bigText", "Information about the school trip.")
+            put("timestamp", System.currentTimeMillis())
+            put("externalId", "school-notice")
+        }.toString() + "\n")
+        val activity = launch(MainActivity::class.java)
+        assertEquals(1, tagged(activity.window.decorView, "homework_card_").size)
+        allButtons(activity.window.decorView).first { it.tag == "feed_all" }.performClick()
+        assertEquals(2, tagged(activity.window.decorView, "homework_card_").size)
     }
 
     @Test fun homeDashboardNavigationButtonsCanBeClickedWithoutCrash() {
@@ -101,7 +135,7 @@ class UiButtonSmokeTest {
             put("importMethod", "WebUntis Auto Sync")
             put("externalId", "test-homework-1")
             put("subject", "Deutsch")
-            put("dueDate", 20260910)
+            put("dueDate", LocalDate.now().plusDays(1).format(DateTimeFormatter.BASIC_ISO_DATE).toInt())
             put("needsAttention", true)
             put("attentionReason", "اختبار: يحتاج مراجعة")
             put("attentionResolved", false)
@@ -116,6 +150,16 @@ class UiButtonSmokeTest {
         buttons.forEach { button ->
             assertTrue("Unwired button in ${activity.javaClass.simpleName}: ${button.text}", button.hasOnClickListeners())
         }
+    }
+
+    private fun tagged(root: View, prefix: String): List<View> {
+        val found = mutableListOf<View>()
+        fun walk(view: View) {
+            if (view.tag?.toString()?.startsWith(prefix) == true) found += view
+            if (view is ViewGroup) for (i in 0 until view.childCount) walk(view.getChildAt(i))
+        }
+        walk(root)
+        return found
     }
 
     private fun allButtons(root: View): List<Button> {
