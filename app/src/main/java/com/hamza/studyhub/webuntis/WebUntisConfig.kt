@@ -53,7 +53,7 @@ object WebUntisConfigStore {
         if (parseQr(qrUri) == null) return false
         val encrypted = runCatching { WebUntisSecretCipher.encrypt(qrUri.trim()) }.getOrNull()
             ?: return false
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit(commit = true) {
             putString(KEY_QR_ENCRYPTED, encrypted)
             remove(KEY_QR)
             remove(KEY_LAST_ERROR)
