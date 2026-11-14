@@ -1,16 +1,24 @@
 package com.hamza.studyhub.update
 
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.Manifest
 import android.content.ClipData
 import android.content.Intent
+import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.appcompat.app.AlertDialog
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.hamza.studyhub.BuildConfig
+import com.hamza.studyhub.HomeActivity
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -34,6 +42,12 @@ object AppUpdateManager {
         "https://api.github.com/repos/muhamadmostafa2013-design/hamza-study-hub/releases/latest"
     private const val PREFS = "hamza_app_update"
     private const val KEY_PENDING_APK = "pending_apk"
+    private const val KEY_READY_APK = "ready_apk"
+    private const val KEY_READY_VERSION = "ready_version"
+    private const val KEY_LAST_NOTIFIED = "last_notified_version"
+    private const val UPDATE_CHANNEL = "hamza_verified_app_updates"
+    private val stageLock = Any()
+    private var promptedVersion: String? = null
 
     data class Release(
         val version: String,
@@ -41,6 +55,126 @@ object AppUpdateManager {
         val apkUrl: String?,
         val sha256: String?
     )
+
+
+    /**
+     * Network-constrained WorkManager checks automatically stage signed APK updates on Wi-Fi.
+     * The OS installer is always launched only after a parent taps "Install".
+     */
+    fun schedule(context: Context) = AppAutoUpdateWorker.schedule(context)
+
+    /**
+     * Runs from WorkManager's background thread, NEVER the UI thread.
+     * The APK is downloaded to private cache and checked before marking it ready.
+     */
+    internal fun stageLatest(context: Context): Boolean = synchronized(stageLock) {
+        val release = fetchLatest()
+        if (!isNewer(release.version, BuildConfig.VERSION_NAME)) return@synchronized false
+        val url = release.apkUrl ?: error("لا يوجد APK صالح في إصدار GitHub الجديد")
+        check(url.startsWith(
+            "https://github.com/muhamadmostafa2013-design/hamza-study-hub/releases/download/"
+        )) { "رابط التحديث ليس من المستودع الرسمي" }
+
+        val folder = File(context.cacheDir, "updates/verified").apply { mkdirs() }
+        val target = File(folder, "Hamza-Study-Hub-v${release.version}.apk")
+        fun verified(file: File): Boolean = runCatching {
+            check(file.exists() && file.length() > 0)
+            release.sha256?.let { expected ->
+                check(sha256(file).equals(expected, ignoreCase = true)) { "SHA-256 لا يطابق الإصدار المنشور" }
+            }
+            verifyApk(context, file, release.version)
+        }.isSuccess
+
+        if (!verified(target)) {
+            target.delete()
+            val partial = File(folder, target.name + ".part")
+            partial.delete()
+            try {
+                downloadApk(url, partial) { }
+                release.sha256?.let { expected ->
+                    check(sha256(partial).equals(expected, ignoreCase = true)) {
+                        "فشل فحص سلامة التحديث"
+                    }
+                }
+                check(partial.renameTo(target)) { "تعذر حفظ ملف التحديث" }
+                check(verified(target)) { "ملف التحديث غير صالح أو توقيعه مختلف" }
+            } finally {
+                partial.delete()
+            }
+        }
+
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_READY_APK, target.absolutePath)
+            .putString(KEY_READY_VERSION, release.version)
+            .apply()
+        folder.listFiles()?.filter { it.name.endsWith(".apk") && it != target }?.forEach { it.delete() }
+        true
+    }
+
+    /** A ready download does not imply permission to install it. */
+    fun offerReadyUpdate(activity: Activity) {
+        val preferences = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val version = preferences.getString(KEY_READY_VERSION, null) ?: return
+        val path = preferences.getString(KEY_READY_APK, null) ?: return
+        if (!isNewer(version, BuildConfig.VERSION_NAME) || promptedVersion == version) return
+        promptedVersion = version
+        thread {
+            val result = runCatching {
+                val apk = File(path)
+                check(apk.exists())
+                verifyApk(activity, apk, version)
+                apk
+            }
+            activity.runOnUiThread {
+                if (activity.isDestroyed || activity.isFinishing) return@runOnUiThread
+                result.onSuccess { apk ->
+                    AlertDialog.Builder(activity)
+                        .setTitle("تحديث Hamza Study Hub v$version جاهز")
+                        .setMessage(
+                            "نزلنا النسخة الجديدة على الواي فاي واتأكدنا من توقيعها. " +
+                                "اضغط «تثبيت» علشان Android يعرض موافقة التحديث ويحافظ على بيانات التطبيق."
+                        )
+                        .setNegativeButton("لاحقًا", null)
+                        .setPositiveButton("تثبيت") { _, _ ->
+                            requestInstallPermissionOrLaunch(activity, apk)
+                        }
+                        .show()
+                }.onFailure {
+                    preferences.edit().remove(KEY_READY_APK).remove(KEY_READY_VERSION).apply()
+                    promptedVersion = null
+                }
+            }
+        }
+    }
+
+    internal fun notifyReady(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val version = prefs.getString(KEY_READY_VERSION, null) ?: return
+        if (prefs.getString(KEY_LAST_NOTIFIED, null) == version) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+        ) return
+
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.createNotificationChannel(NotificationChannel(
+            UPDATE_CHANNEL, "Hamza Study Hub updates", NotificationManager.IMPORTANCE_DEFAULT
+        ))
+        val intent = Intent(context, HomeActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pending = PendingIntent.getActivity(
+            context, 5103, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        manager.notify(5103, NotificationCompat.Builder(context, UPDATE_CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle("تحديث التطبيق v$version جاهز")
+            .setContentText("افتح التطبيق للموافقة على تثبيت النسخة الجديدة")
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build())
+        prefs.edit().putString(KEY_LAST_NOTIFIED, version).apply()
+    }
 
     fun check(activity: Activity, silentIfCurrent: Boolean = true) {
         thread {
@@ -263,7 +397,7 @@ object AppUpdateManager {
         }
     }
 
-    private fun verifyApk(activity: Activity, apk: File, expectedVersion: String) {
+    private fun verifyApk(activity: Context, apk: File, expectedVersion: String) {
         val pm = activity.packageManager
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             PackageManager.GET_SIGNING_CERTIFICATES

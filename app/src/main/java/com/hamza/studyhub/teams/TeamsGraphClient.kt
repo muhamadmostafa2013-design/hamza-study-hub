@@ -4,7 +4,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 /**
  * Read-only Microsoft Graph client for the school Teams / Assignments surface.
@@ -46,7 +49,7 @@ class TeamsGraphClient(
     }
 
     fun getAssignment(classId: String, assignmentId: String): AssignmentDetail {
-        val url = "$baseUrl/education/classes/$classId/assignments/$assignmentId?\$expand=resources"
+        val url = "$baseUrl/education/classes/${encodePath(classId)}/assignments/${encodePath(assignmentId)}?\$expand=resources"
         return parseDetail(getJson(url))
     }
 
@@ -54,8 +57,12 @@ class TeamsGraphClient(
         val out = mutableListOf<JSONObject>()
         var next: String? = initialUrl
         var pageGuard = 0
+        val visited = mutableSetOf<String>()
 
-        while (!next.isNullOrBlank() && pageGuard < 50) {
+        while (!next.isNullOrBlank()) {
+            if (pageGuard >= 50 || !visited.add(next)) {
+                throw TeamsGraphException(0, "Microsoft Graph pagination exceeded its safe limit")
+            }
             val payload = getJson(next)
             val values = payload.optJSONArray("value") ?: JSONArray()
             for (i in 0 until values.length()) {
@@ -67,8 +74,33 @@ class TeamsGraphClient(
         return out
     }
 
+    private fun encodePath(value: String): String =
+        URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
+
+    /**
+     * Graph-provided nextLink values are untrusted external input. Do not send
+     * the bearer token to another host, protocol, port, or API root.
+     */
+    internal fun trustedGraphUrl(raw: String): URL {
+        val origin = URI(baseUrl.trimEnd('/')).normalize()
+        val target = runCatching { URI(raw).normalize() }.getOrNull()
+            ?: throw TeamsGraphException(0, "Invalid Microsoft Graph URL")
+        val prefix = origin.path.trimEnd('/') + "/"
+        if (!target.scheme.equals(origin.scheme, ignoreCase = true) ||
+            !target.host.equals(origin.host, ignoreCase = true) ||
+            target.port != origin.port ||
+            target.rawUserInfo != null ||
+            target.rawFragment != null ||
+            !target.path.startsWith(prefix)
+        ) {
+            throw TeamsGraphException(0, "Rejected untrusted Microsoft Graph URL")
+        }
+        return target.toURL()
+    }
+
     private fun getJson(url: String): JSONObject {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+        val connection = (trustedGraphUrl(url).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
             requestMethod = "GET"
             connectTimeout = 15_000
             readTimeout = 20_000

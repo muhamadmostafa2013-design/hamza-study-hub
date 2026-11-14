@@ -96,17 +96,27 @@ private object TaskPlannerAgent : StudyAgent {
         val raw = context.raw
         if (raw.optString("updateType") != UpdateType.HOMEWORK.name) return
         val steps = raw.optJSONArray("understoodSteps") ?: JSONArray()
+        // Re-enrichment (UI upgrades and school re-sync) must not erase study work.
+        val previous = raw.optJSONArray("taskChecklist")
+        val completedIds = mutableSetOf<String>()
+        if (previous != null) {
+            for (i in 0 until previous.length()) {
+                val prior = previous.optJSONObject(i) ?: continue
+                if (prior.optBoolean("done", false)) completedIds += prior.optString("id")
+            }
+        }
         val tasks = JSONArray()
         for (i in 0 until steps.length()) {
             val text = steps.optString(i).trim()
             if (text.isBlank()) continue
-            tasks.put(JSONObject().put("id", "step-${i + 1}-${fingerprint(text).take(8)}")
-                .put("title", text).put("done", false).put("order", i + 1))
+            val taskId = "step-${i + 1}-${fingerprint(text).take(8)}"
+            tasks.put(JSONObject().put("id", taskId)
+                .put("title", text).put("done", taskId in completedIds).put("order", i + 1))
         }
         if (tasks.length() == 0) {
             tasks.put(JSONObject().put("id", "step-1-read")
                 .put("title", "راجع تفاصيل الواجب من المصدر الرسمي قبل البدء")
-                .put("done", false).put("order", 1))
+                .put("done", "step-1-read" in completedIds).put("order", 1))
         }
         raw.put("taskChecklist", tasks)
         raw.put("progressPercent", 0)
