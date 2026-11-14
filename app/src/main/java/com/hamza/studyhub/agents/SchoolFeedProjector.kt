@@ -39,7 +39,7 @@ object SchoolFeedProjector {
         }
 
         return (latestByKey.values + unkeyed)
-            .filterNot { it.optBoolean("completed", false) }
+            .filterNot { it.optBoolean("completed", false) || it.optInt("progressPercent", 0) >= 100 }
             .filter { isCurrent(it, today, nowMillis) }
             .sortedByDescending { it.optLong("timestamp", 0L) }
     }
