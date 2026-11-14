@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -29,6 +30,7 @@ import com.hamza.studyhub.books.ResolutionStatus
 import com.hamza.studyhub.homework.HomeworkInterpreter
 import com.hamza.studyhub.homework.UpdateType
 import com.hamza.studyhub.learning.StudentWorkCaptureActivity
+import com.hamza.studyhub.sources.SchoolFeedStore
 import com.hamza.studyhub.teams.TeamsAuthStore
 import com.hamza.studyhub.teams.TeamsSyncWorker
 import com.hamza.studyhub.ui.HamzaUi
@@ -55,7 +57,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var attentionButton: MaterialButton
     private var feedMode = FeedMode.ALL
 
-    private val dataFile by lazy { File(filesDir, "school_notifications.jsonl") }
     private val bookStore by lazy { BookLibraryStore(this) }
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -288,17 +289,26 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        val steps = item.optJSONArray("understoodSteps")?.toStringList().orEmpty()
-        if (steps.isNotEmpty() && interpretation.type == UpdateType.HOMEWORK) {
-            body.addView(
-                HamzaUi.statusBox(
-                    this,
-                    "المطلوب من حمزة\n" + steps.mapIndexed { index, step -> "${index + 1}. $step" }.joinToString("\n"),
-                    0xFFEFF5FC.toInt(),
-                    HamzaUi.blue
-                ),
-                HamzaUi.marginTop(this, 10)
-            )
+        val checklist = item.optJSONArray("taskChecklist")
+        if (checklist != null && checklist.length() > 0 && interpretation.type == UpdateType.HOMEWORK) {
+            val progress = item.optInt("progressPercent", 0)
+            body.addView(HamzaUi.subtitle(this, "خطة الحل • أنجزت $progress%"), HamzaUi.marginTop(this, 10))
+            for (i in 0 until checklist.length()) {
+                val task = checklist.optJSONObject(i) ?: continue
+                val id = task.optString("id")
+                if (id.isBlank()) continue
+                body.addView(CheckBox(this).apply {
+                    text = task.optString("title")
+                    textSize = 15f
+                    setTextColor(HamzaUi.ink)
+                    isChecked = task.optBoolean("done", false)
+                    tag = "assignment_task_${item.optLong("timestamp")}_$i"
+                    setOnClickListener {
+                        updateChecklistStep(item, id, isChecked)
+                        refreshFeed()
+                    }
+                }, HamzaUi.marginTop(this, 4))
+            }
         }
 
         if (referenceDetected) {
@@ -440,7 +450,7 @@ class MainActivity : AppCompatActivity() {
             put("attentionReason", if (interpretation.needsFullText) "النص لا يحتوي تفاصيل كافية لفهم المطلوب بدقة." else "")
             put("attentionResolved", false)
         }
-        dataFile.appendText(AgentOrchestrator.enrich(item).toString() + "\n")
+        SchoolFeedStore.append(this, AgentOrchestrator.enrich(item))
     }
 
     private fun showShareStatus(message: String) {
@@ -448,20 +458,15 @@ class MainActivity : AppCompatActivity() {
         shareStatusText.visibility = View.VISIBLE
     }
 
-    private fun readAndUpgradeNotifications(): List<JSONObject> {
-        if (!dataFile.exists()) return emptyList()
-        var changed = false
-        val items = dataFile.readLines()
-            .mapNotNull { runCatching { JSONObject(it) }.getOrNull() }
-            .map { item ->
+    private fun readAndUpgradeNotifications(): List<JSONObject> =
+        SchoolFeedStore.edit(this) { entries ->
+            entries.forEachIndexed { index, item ->
                 if (item.optString("agentPipelineVersion") != "3.1") {
-                    changed = true
-                    AgentOrchestrator.enrich(item)
-                } else item
+                    entries[index] = AgentOrchestrator.enrich(item)
+                }
             }
-        if (changed) writeItems(items)
-        return items
-    }
+            entries.toList()
+        }
 
     private fun markAsReviewed(target: JSONObject) = rewriteTarget(target) { it.put("isNew", false) }
 
@@ -471,15 +476,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun rewriteTarget(target: JSONObject, update: (JSONObject) -> Unit) {
-        val updated = readAndUpgradeNotifications().map { item ->
-            if (sameItem(item, target)) update(item)
-            item
+        SchoolFeedStore.edit(this) { entries ->
+            entries.forEach { item -> if (sameItem(item, target)) update(item) }
         }
-        writeItems(updated)
     }
 
-    private fun writeItems(items: List<JSONObject>) {
-        dataFile.writeText(items.joinToString("\n") { it.toString() } + if (items.isNotEmpty()) "\n" else "")
+    private fun updateChecklistStep(target: JSONObject, taskId: String, done: Boolean) {
+        SchoolFeedStore.edit(this) { entries ->
+            val item = entries.firstOrNull { sameItem(it, target) } ?: return@edit
+            val tasks = item.optJSONArray("taskChecklist") ?: return@edit
+            var completed = 0
+            for (index in 0 until tasks.length()) {
+                val task = tasks.optJSONObject(index) ?: continue
+                if (task.optString("id") == taskId) task.put("done", done)
+                if (task.optBoolean("done", false)) completed++
+            }
+            val percent = if (tasks.length() == 0) 0 else (completed * 100 / tasks.length())
+            item.put("progressPercent", percent)
+            item.put("progressStatus", when {
+                percent >= 100 -> "DONE"
+                percent > 0 -> "IN_PROGRESS"
+                else -> "NOT_STARTED"
+            })
+        }
     }
 
     private fun sameItem(a: JSONObject, b: JSONObject): Boolean {

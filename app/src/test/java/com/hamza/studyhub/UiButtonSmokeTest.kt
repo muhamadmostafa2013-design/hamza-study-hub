@@ -5,6 +5,7 @@ import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CheckBox
 import androidx.test.core.app.ApplicationProvider
 import com.hamza.studyhub.books.BookLibraryActivity
 import com.hamza.studyhub.learning.StudentWorkCaptureActivity
@@ -58,6 +59,16 @@ class UiButtonSmokeTest {
         assertTrue(buttons.any { it.tag?.toString()?.startsWith("assignment_capture_") == true })
         assertTrue(buttons.any { it.tag?.toString()?.startsWith("assignment_resolve_") == true })
         assertTrue(buttons.any { it.tag?.toString()?.startsWith("assignment_source_") == true })
+    }
+
+    @Test fun checklistCheckboxUpdatesSavedProgress() {
+        seedAttentionHomework()
+        val activity = launch(MainActivity::class.java)
+        val checkbox = allButtons(activity.window.decorView).filterIsInstance<CheckBox>().first()
+        assertTrue(checkbox.performClick())
+        val saved = feedFile.readLines().map { JSONObject(it) }.first()
+        assertTrue(saved.getJSONArray("taskChecklist").getJSONObject(0).getBoolean("done"))
+        assertTrue(saved.getInt("progressPercent") > 0)
     }
 
     @Test fun resolveAttentionButtonPersistsResolvedState() {

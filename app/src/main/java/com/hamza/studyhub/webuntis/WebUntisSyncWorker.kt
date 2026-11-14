@@ -12,6 +12,7 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.hamza.studyhub.agents.AgentOrchestrator
 import com.hamza.studyhub.monitor.BackgroundAlert
+import com.hamza.studyhub.sources.SchoolFeedStore
 import org.json.JSONObject
 import java.io.File
 import java.time.LocalDate
@@ -68,15 +69,7 @@ class WebUntisSyncWorker(
     )
 
     private fun mergeIntoFeed(homeworks: List<WebUntisClient.Homework>, today: LocalDate): SyncSummary {
-        val file = File(applicationContext.filesDir, "school_notifications.jsonl")
-        val existing = if (file.exists()) {
-            file.readLines().mapNotNull { line ->
-                runCatching { JSONObject(line) }.getOrNull()
-            }.toMutableList()
-        } else {
-            mutableListOf()
-        }
-
+        return SchoolFeedStore.edit(applicationContext) { existing ->
         val byExternalId = existing
             .mapIndexedNotNull { index, item ->
                 item.optString("externalId").takeIf { it.isNotBlank() }?.let { it to index }
@@ -167,6 +160,8 @@ class WebUntisSyncWorker(
                 put("attentionResolved", attentionResolved)
             }
 
+            // Preserve Hamza's study progress across official homework re-syncs.
+            previous?.optJSONArray("taskChecklist")?.let { rawItem.put("taskChecklist", it) }
             val item = AgentOrchestrator.enrich(rawItem)
             if (item.optBoolean("needsAttention", false) && !attentionResolved) attentionCount++
 
@@ -178,11 +173,8 @@ class WebUntisSyncWorker(
             }
         }
 
-        file.writeText(
-            existing.joinToString("\n") { it.toString() } + if (existing.isNotEmpty()) "\n" else ""
-        )
-
-        return SyncSummary(newCount, updatedCount, attentionCount)
+        SyncSummary(newCount, updatedCount, attentionCount)
+        }
     }
 
     private fun parseUntisDate(value: Int): LocalDate? {
