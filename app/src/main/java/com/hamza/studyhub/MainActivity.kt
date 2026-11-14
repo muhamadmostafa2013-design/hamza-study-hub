@@ -513,6 +513,7 @@ class MainActivity : AppCompatActivity() {
             text = task.optString("title")
             textSize = 15f
             minHeight = HamzaUi.dp(this@MainActivity, 48)
+            setMinimumHeight(HamzaUi.dp(this@MainActivity, 48))
             setTextColor(HamzaUi.ink)
             isChecked = task.optBoolean("done", false)
             tag = "assignment_task_${item.optLong("timestamp")}_$index"
