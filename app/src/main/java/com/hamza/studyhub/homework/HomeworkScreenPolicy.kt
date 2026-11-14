@@ -44,7 +44,7 @@ object HomeworkScreenPolicy {
             days < 0 -> DueStatus("متأخر ${-days} يوم", Tone.URGENT, 0, parsed)
             days == 0L -> DueStatus("التسليم اليوم", Tone.URGENT, 1, parsed)
             days == 1L -> DueStatus("التسليم غدًا", Tone.WARNING, 2, parsed)
-            days in 2..3 -> DueStatus("خلال $days أيام", Tone.WARNING, 3, parsed)
+            days in 2L..3L -> DueStatus("خلال $days أيام", Tone.WARNING, 3, parsed)
             else -> DueStatus("التسليم ${parsed.format(DateTimeFormatter.ofPattern("dd/MM"))}", Tone.NORMAL, 4, parsed)
         }
     }
