@@ -135,15 +135,18 @@ class HomeworkScreenVisualTest {
 
     @Test fun filtersAndChecklistMeetMinimumTouchTargetGuidance() {
         write(homework(501L, date(1), steps = 2))
-        val root = launch().window.decorView
-        val density = context.resources.displayMetrics.density
+        val activity = launch()
+        val root = activity.window.decorView
+        val density = activity.resources.displayMetrics.density
         val controls = listOf("feed_todo", "feed_attention", "feed_all",
             "feed_manage_sources", "assignment_source_501", "assignment_details_501")
         controls.forEach { tag ->
             assertTrue("Button $tag should be >=48dp",
                 tagged<Button>(root, tag).minimumHeight >= (48 * density).toInt())
         }
-        assertTrue(tagged<CheckBox>(root, "assignment_task_501_0").minimumHeight >= (48 * density).toInt())
+        val checklist = tagged<CheckBox>(root, "assignment_task_501_0")
+        assertTrue("Checkbox touch target ${checklist.minimumHeight}px must be at least ${(48 * density).toInt()}px",
+            checklist.minimumHeight >= (48 * density).toInt())
     }
 
     private fun write(vararg items: JSONObject) {
