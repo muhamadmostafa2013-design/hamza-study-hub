@@ -57,7 +57,13 @@ class UiButtonSmokeTest {
             assertTrue("Unwired button: ${button.text} tag=${button.tag}", button.hasOnClickListeners())
         }
         assertTrue(buttons.any { it.tag?.toString()?.startsWith("assignment_capture_") == true })
-        assertTrue(buttons.any { it.tag?.toString()?.startsWith("assignment_resolve_") == true })
+        val details = allButtons(activity.window.decorView).first {
+            it.tag?.toString()?.startsWith("assignment_details_") == true
+        }
+        assertTrue(details.performClick())
+        assertTrue(allButtons(activity.window.decorView).any {
+            it.tag?.toString()?.startsWith("assignment_resolve_") == true
+        })
         assertTrue(buttons.any { it.tag?.toString()?.startsWith("assignment_source_") == true })
     }
 
@@ -74,6 +80,9 @@ class UiButtonSmokeTest {
     @Test fun resolveAttentionButtonPersistsResolvedState() {
         seedAttentionHomework()
         val activity = launch(MainActivity::class.java)
+        val details = allButtons(activity.window.decorView)
+            .first { it.tag?.toString()?.startsWith("assignment_details_") == true }
+        assertTrue(details.performClick())
         val resolve = allButtons(activity.window.decorView)
             .first { it.tag?.toString()?.startsWith("assignment_resolve_") == true }
         assertTrue(resolve.performClick())
@@ -121,7 +130,7 @@ class UiButtonSmokeTest {
     private fun allButtons(root: View): List<Button> {
         val result = mutableListOf<Button>()
         fun walk(view: View) {
-            if (view is Button && view.visibility == View.VISIBLE) result += view
+            if (view is Button && view.isShown) result += view
             if (view is ViewGroup) for (i in 0 until view.childCount) walk(view.getChildAt(i))
         }
         walk(root)
