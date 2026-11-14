@@ -2,6 +2,7 @@ package com.hamza.studyhub.teams
 
 import android.content.Context
 import com.hamza.studyhub.agents.AgentOrchestrator
+import com.hamza.studyhub.sources.SchoolFeedStore
 import org.json.JSONObject
 import java.io.File
 import java.time.LocalDate
@@ -28,15 +29,7 @@ class TeamsDeepSyncEngine(
     )
 
     fun sync(): SyncSummary {
-        val dataFile = File(context.filesDir, "school_notifications.jsonl")
-        val existing = if (dataFile.exists()) {
-            dataFile.readLines().mapNotNull { line ->
-                runCatching { JSONObject(line) }.getOrNull()
-            }.toMutableList()
-        } else {
-            mutableListOf()
-        }
-
+        return SchoolFeedStore.edit(context) { existing ->
         val byExternalId = existing.mapIndexedNotNull { index, item ->
             item.optString("externalId").takeIf { it.isNotBlank() }?.let { it to index }
         }.toMap().toMutableMap()
@@ -106,6 +99,8 @@ class TeamsDeepSyncEngine(
                 put("attentionResolved", attentionResolved)
             }
 
+            // Keep Hamza's locally completed checklist steps during official updates.
+            old?.optJSONArray("taskChecklist")?.let { raw.put("taskChecklist", it) }
             val enriched = AgentOrchestrator.enrich(raw)
             if (enriched.optBoolean("needsAttention", false) && !attentionResolved) attention++
 
@@ -119,10 +114,8 @@ class TeamsDeepSyncEngine(
             }
         }
 
-        dataFile.writeText(
-            existing.joinToString("\n") { it.toString() } + if (existing.isNotEmpty()) "\n" else ""
-        )
-        return SyncSummary(discovered, updated, unchanged, attention)
+        SyncSummary(discovered, updated, unchanged, attention)
+        }
     }
 
     private fun buildBody(detail: TeamsGraphClient.AssignmentDetail): String {
