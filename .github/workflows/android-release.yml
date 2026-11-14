@@ -69,8 +69,8 @@ jobs:
           echo "RELEASE_TAG=v$VERSION_NAME" >> "$GITHUB_ENV"
           echo "Building Hamza Study Hub $VERSION_NAME ($VERSION_CODE)"
 
-      - name: Run tests before signing
-        run: gradle :app:testDebugUnitTest --stacktrace
+      - name: Run tests and full Android lint before signing
+        run: gradle :app:testDebugUnitTest :app:lintDebug --stacktrace
 
       - name: Restore release keystore
         env:
