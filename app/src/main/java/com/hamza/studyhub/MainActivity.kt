@@ -289,13 +289,13 @@ class MainActivity : AppCompatActivity() {
         }
         val content = HamzaUi.cardContent(card)
         val headline = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
         }
         headline.addView(HamzaUi.title(this, heading, 19f).apply {
             tag = "assignment_title_$idTag"
             maxLines = 2
-        }, LinearLayout.LayoutParams(0, -2, 1f))
+        }, LinearLayout.LayoutParams(-1, -2))
 
         if (homework) {
             val tone = when (due.tone) {
@@ -311,7 +311,8 @@ class MainActivity : AppCompatActivity() {
             headline.addView(HamzaUi.softPill(this, due.text, fill, tone).apply {
                 tag = "assignment_due_$idTag"
             }, LinearLayout.LayoutParams(-2, -2).apply {
-                marginStart = HamzaUi.dp(this@MainActivity, 7)
+                topMargin = HamzaUi.dp(this@MainActivity, 5)
+                gravity = Gravity.END
             })
         }
         content.addView(headline)
