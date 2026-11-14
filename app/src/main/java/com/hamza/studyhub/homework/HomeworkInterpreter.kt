@@ -50,7 +50,14 @@ object HomeworkInterpreter {
             "due date", "deadline", "fällig", "abgabe", "abgabetermin", "verschoben",
             "geändert", "changed due", "new due", "neuer termin"
         )
-        if (deadlineWords.any { text.contains(it) }) return UpdateType.DEADLINE_CHANGE
+        // A normal assignment often contains "due date". Treat it as homework
+        // unless the text explicitly announces that its deadline changed.
+        val explicitDeadlineChanges = listOf(
+            "due date changed", "deadline changed", "changed due", "new due",
+            "abgabetermin verschoben", "abgabe verschoben", "frist verschoben",
+            "neuer abgabetermin"
+        )
+        if (explicitDeadlineChanges.any { text.contains(it) }) return UpdateType.DEADLINE_CHANGE
 
         val timetableWords = listOf(
             "stundenplan", "vertretung", "entfällt", "raumänderung", "room change",
@@ -63,6 +70,7 @@ object HomeworkInterpreter {
             "bearbeiten", "worksheet", "arbeitsblatt", "reference materials"
         )
         if (homeworkWords.any { text.contains(it) }) return UpdateType.HOMEWORK
+        if (deadlineWords.any { text.contains(it) }) return UpdateType.DEADLINE_CHANGE
 
         val messageWords = listOf(
             "mitteilung", "nachricht", "information", "announcement", "reminder", "hinweis"

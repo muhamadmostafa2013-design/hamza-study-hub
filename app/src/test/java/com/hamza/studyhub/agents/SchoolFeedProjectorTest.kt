@@ -52,6 +52,13 @@ class SchoolFeedProjectorTest {
         assertEquals(20260918, result.single().optInt("dueDate"))
     }
 
+    @Test fun fullyCheckedHomeworkIsHiddenFromCurrentOpenFeed() {
+        val done = homework("done-local", 20260916, now).apply {
+            put("progressPercent", 100)
+        }
+        assertTrue(SchoolFeedProjector.current(listOf(done), today, now).isEmpty())
+    }
+
     @Test fun undatedOldNotificationDoesNotStayNewForever() {
         val old = homework("undated", 0, now - 10L * 24 * 60 * 60 * 1000)
 

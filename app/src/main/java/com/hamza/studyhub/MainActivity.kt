@@ -9,6 +9,8 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.widget.CheckBox
+import android.text.TextUtils
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -27,8 +29,10 @@ import com.hamza.studyhub.books.BookLibraryActivity
 import com.hamza.studyhub.books.BookLibraryStore
 import com.hamza.studyhub.books.ResolutionStatus
 import com.hamza.studyhub.homework.HomeworkInterpreter
+import com.hamza.studyhub.homework.HomeworkFeedPresentation
 import com.hamza.studyhub.homework.UpdateType
 import com.hamza.studyhub.learning.StudentWorkCaptureActivity
+import com.hamza.studyhub.sources.SchoolFeedStore
 import com.hamza.studyhub.teams.TeamsAuthStore
 import com.hamza.studyhub.teams.TeamsSyncWorker
 import com.hamza.studyhub.ui.HamzaUi
@@ -44,24 +48,26 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
-    private enum class FeedMode { ALL, ATTENTION }
+    private enum class FeedMode { HOMEWORK, ATTENTION, ALL }
 
     private lateinit var feedContainer: LinearLayout
     private lateinit var newCountText: TextView
     private lateinit var attentionCountText: TextView
     private lateinit var syncStatusText: TextView
     private lateinit var shareStatusText: TextView
+    private lateinit var homeworkButton: MaterialButton
     private lateinit var allButton: MaterialButton
     private lateinit var attentionButton: MaterialButton
-    private var feedMode = FeedMode.ALL
+    private lateinit var feedScrollView: ScrollView
+    private val expandedItems = mutableSetOf<String>()
+    private var feedMode = FeedMode.HOMEWORK
 
-    private val dataFile by lazy { File(filesDir, "school_notifications.jsonl") }
     private val bookStore by lazy { BookLibraryStore(this) }
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        feedMode = if (intent.getBooleanExtra("open_attention", false)) FeedMode.ATTENTION else FeedMode.ALL
+        feedMode = if (intent.getBooleanExtra("open_attention", false)) FeedMode.ATTENTION else FeedMode.HOMEWORK
         setContentView(buildScreen())
         requestNotificationPermissionIfNeeded()
         processIncomingShare(intent)
@@ -91,75 +97,60 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(
-                HamzaUi.dp(this@MainActivity, 18),
-                HamzaUi.dp(this@MainActivity, 20),
-                HamzaUi.dp(this@MainActivity, 18),
-                HamzaUi.dp(this@MainActivity, 16)
+                HamzaUi.dp(this@MainActivity, 16), HamzaUi.dp(this@MainActivity, 16),
+                HamzaUi.dp(this@MainActivity, 16), HamzaUi.dp(this@MainActivity, 10)
             )
             setBackgroundColor(HamzaUi.bg)
         }
-        root.addView(HamzaUi.title(this, "الواجبات"))
+        root.addView(HamzaUi.title(this, "واجبات حمزة", 25f))
         root.addView(
-            HamzaUi.subtitle(this, "كل تحديث مدرسي في سجل واحد، مع فصل الواضح عن اللي يحتاج تدخل منك."),
-            HamzaUi.marginTop(this, 4)
+            HamzaUi.subtitle(this, "شوف الأقرب للتسليم وابدأ بالخطوة الجاية."),
+            HamzaUi.marginTop(this, 2)
         )
 
-        val summaryRow = LinearLayout(this).apply {
+        val summary = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        newCountText = HamzaUi.softPill(this, "0\nجديد", 0xFFE8F1FF.toInt(), HamzaUi.blue).apply {
+        newCountText = HamzaUi.softPill(this, "0\nمطلوب", 0xFFE8F1FF.toInt(), HamzaUi.blue).apply {
+            tag = "summary_open_homework"
             gravity = Gravity.CENTER
-            minHeight = HamzaUi.dp(this@MainActivity, 62)
+            minHeight = HamzaUi.dp(this@MainActivity, 54)
         }
-        attentionCountText = HamzaUi.softPill(this, "0\nيحتاج انتباه", 0xFFFFEFE2.toInt(), HamzaUi.amber).apply {
+        attentionCountText = HamzaUi.softPill(this, "0\nعاجل", 0xFFFFEFE2.toInt(), HamzaUi.amber).apply {
+            tag = "summary_urgent_homework"
             gravity = Gravity.CENTER
-            minHeight = HamzaUi.dp(this@MainActivity, 62)
+            minHeight = HamzaUi.dp(this@MainActivity, 54)
         }
-        summaryRow.addView(
-            newCountText,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = HamzaUi.dp(this@MainActivity, 5)
-            }
-        )
-        summaryRow.addView(
-            attentionCountText,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = HamzaUi.dp(this@MainActivity, 5)
-            }
-        )
-        root.addView(summaryRow, HamzaUi.marginTop(this, 14))
+        summary.addView(newCountText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginEnd = HamzaUi.dp(this@MainActivity, 5)
+        })
+        summary.addView(attentionCountText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = HamzaUi.dp(this@MainActivity, 5)
+        })
+        root.addView(summary, HamzaUi.marginTop(this, 12))
 
-        syncStatusText = HamzaUi.statusBox(this, "", 0xFFF0F4F8.toInt(), HamzaUi.muted)
-        root.addView(syncStatusText, HamzaUi.marginTop(this, 10))
-
-        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        allButton = HamzaUi.primaryButton(this, "الكل والجديد").apply {
-            tag = "feed_all"
-            setOnClickListener {
-                feedMode = FeedMode.ALL
-                refreshFeed()
-            }
+        val tabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
-        attentionButton = HamzaUi.secondaryButton(this, "يحتاج انتباه", HamzaUi.amber).apply {
+        homeworkButton = HamzaUi.primaryButton(this, "الواجبات").apply {
+            tag = "feed_homework"
+            setOnClickListener { feedMode = FeedMode.HOMEWORK; refreshFeed() }
+        }
+        attentionButton = HamzaUi.secondaryButton(this, "مراجعة").apply {
             tag = "feed_attention"
-            setOnClickListener {
-                feedMode = FeedMode.ATTENTION
-                refreshFeed()
-            }
+            setOnClickListener { feedMode = FeedMode.ATTENTION; refreshFeed() }
         }
-        tabs.addView(
-            allButton,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = HamzaUi.dp(this@MainActivity, 5)
-            }
-        )
-        tabs.addView(
-            attentionButton,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = HamzaUi.dp(this@MainActivity, 5)
-            }
-        )
+        allButton = HamzaUi.secondaryButton(this, "الكل").apply {
+            tag = "feed_all"
+            setOnClickListener { feedMode = FeedMode.ALL; refreshFeed() }
+        }
+        listOf(homeworkButton, attentionButton, allButton).forEachIndexed { index, button ->
+            tabs.addView(button, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, if (index == 0) 1.1f else 1f).apply {
+                if (index > 0) marginStart = HamzaUi.dp(this@MainActivity, 4)
+            })
+        }
         root.addView(tabs, HamzaUi.marginTop(this, 10))
 
         shareStatusText = HamzaUi.statusBox(this, "", 0xFFEAF6EF.toInt(), HamzaUi.green).apply {
@@ -167,9 +158,20 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(shareStatusText, HamzaUi.marginTop(this, 8))
 
+        val scrollContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        feedContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, HamzaUi.dp(this@MainActivity, 10), 0, HamzaUi.dp(this@MainActivity, 10))
+        }
+        scrollContent.addView(feedContainer)
+        scrollContent.addView(HamzaUi.section(this, "أدوات أخرى"))
+
         val utilityRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         utilityRow.addView(
-            HamzaUi.secondaryButton(this, "المصادر").apply {
+            HamzaUi.secondaryButton(this, "مصادر المدرسة").apply {
                 tag = "feed_sources"
                 setOnClickListener { startActivity(Intent(this@MainActivity, SourceHubActivity::class.java)) }
             },
@@ -186,163 +188,133 @@ class MainActivity : AppCompatActivity() {
                 marginStart = HamzaUi.dp(this@MainActivity, 5)
             }
         )
-        root.addView(utilityRow, HamzaUi.marginTop(this, 8))
+        scrollContent.addView(utilityRow, HamzaUi.marginTop(this, 4))
+        syncStatusText = HamzaUi.subtitle(this, "")
+        scrollContent.addView(syncStatusText, HamzaUi.marginTop(this, 10))
 
-        feedContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, HamzaUi.dp(this@MainActivity, 12), 0, HamzaUi.dp(this@MainActivity, 24))
+        feedScrollView = ScrollView(this).apply {
+            isFillViewport = false
+            addView(scrollContent)
         }
-        root.addView(
-            ScrollView(this).apply { addView(feedContainer) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-        )
+        root.addView(feedScrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         return root
     }
 
     private fun refreshFeed() {
+        val oldScroll = if (::feedScrollView.isInitialized) feedScrollView.scrollY else 0
         val allItems = readAndUpgradeNotifications().sortedByDescending { it.optLong("timestamp") }
-        val attention = allItems.filter {
-            it.optBoolean("needsAttention", false) && !it.optBoolean("attentionResolved", false)
-        }
-        val newCount = allItems.count { it.optBoolean("isNew", true) }
-        newCountText.text = getString(R.string.metric_new, newCount)
-        attentionCountText.text = getString(R.string.metric_attention, attention.size)
+        val active = HomeworkFeedPresentation.currentHomework(allItems)
+        val attention = HomeworkFeedPresentation.currentAttention(allItems)
+        newCountText.text = "${active.size}\nمطلوب"
+        attentionCountText.text = "${active.count { HomeworkFeedPresentation.isUrgent(it) }}\nعاجل"
+        attentionButton.text = "مراجعة (${attention.size})"
         updateSyncStatus()
-        allButton.alpha = if (feedMode == FeedMode.ALL) 1f else 0.72f
-        attentionButton.alpha = if (feedMode == FeedMode.ATTENTION) 1f else 0.72f
 
-        val visible = if (feedMode == FeedMode.ATTENTION) attention else allItems
+        homeworkButton.alpha = if (feedMode == FeedMode.HOMEWORK) 1f else 0.70f
+        attentionButton.alpha = if (feedMode == FeedMode.ATTENTION) 1f else 0.70f
+        allButton.alpha = if (feedMode == FeedMode.ALL) 1f else 0.70f
+        val visible = when (feedMode) {
+            FeedMode.HOMEWORK -> active
+            FeedMode.ATTENTION -> attention
+            FeedMode.ALL -> allItems
+        }
         feedContainer.removeAllViews()
         if (visible.isEmpty()) {
-            feedContainer.addView(
-                HamzaUi.statusBox(
-                    this,
-                    if (feedMode == FeedMode.ATTENTION) "لا يوجد شيء يحتاج تدخل منك حاليًا." else "لا توجد تحديثات محفوظة بعد.",
-                    Color.WHITE,
-                    HamzaUi.muted
-                )
-            )
-            return
+            val message = when (feedMode) {
+                FeedMode.HOMEWORK -> "مفيش واجبات مفتوحة حاليًا. تقدر تشوف التحديثات القديمة من «الكل»."
+                FeedMode.ATTENTION -> "مفيش تحديثات تحتاج مراجعة حاليًا."
+                FeedMode.ALL -> "مفيش تحديثات محفوظة لسه."
+            }
+            feedContainer.addView(HamzaUi.statusBox(this, message, Color.WHITE, HamzaUi.muted))
+        } else {
+            visible.forEach { feedContainer.addView(buildNotificationCard(it)) }
         }
-        visible.forEach { feedContainer.addView(buildNotificationCard(it)) }
+        feedScrollView.post { feedScrollView.scrollTo(0, oldScroll) }
     }
 
     private fun buildNotificationCard(item: JSONObject): View {
         val source = item.optString("source", "School")
-        val title = item.optString("title").ifBlank { "تحديث جديد" }
-        val bodyText = item.optString("bigText").ifBlank { item.optString("text") }
-        val interpretation = HomeworkInterpreter.interpret(title, bodyText)
-        val needsAttention = item.optBoolean("needsAttention", false) && !item.optBoolean("attentionResolved", false)
+        val title = item.optString("title").ifBlank { "تحديث مدرسي" }
         val subject = item.optString("subject").ifBlank { title.substringAfter("•", "").trim() }
-        val referenceDetected = item.optBoolean("bookReferenceDetected", false)
-        val resolved = if (referenceDetected) BookAssignmentResolver(bookStore).resolve(subject, title, bodyText) else null
-        val exercises = item.optJSONArray("bookExercises")?.toStringList().orEmpty()
-        val page = item.optInt("bookPage", 0).takeIf { it > 0 } ?: resolved?.reference?.page
-
-        val card = HamzaUi.card(this)
-        val body = HamzaUi.cardContent(card)
-        val sourceColor = when {
-            source.equals("Teams", true) -> HamzaUi.purple
-            source.equals("Untis", true) -> HamzaUi.green
-            else -> HamzaUi.muted
+        val label = subject.ifBlank { title }
+        val isHomework = HomeworkFeedPresentation.isHomework(item)
+        val needsAttention = HomeworkFeedPresentation.isAttention(item)
+        val key = HomeworkFeedPresentation.key(item)
+        val expanded = key in expandedItems
+        val sourceUrl = item.optString("sourceUrl")
+        val canOpenSource = sourceUrl.isNotBlank() || source.equals("Teams", true) || source.equals("Untis", true)
+        val card = HamzaUi.card(this, radius = 18, padding = 15).apply {
+            tag = "homework_card_$key"
         }
-        val topRow = LinearLayout(this).apply {
+        val body = HamzaUi.cardContent(card)
+
+        val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        topRow.addView(
-            HamzaUi.softPill(
-                this,
-                if (source.equals("Teams", true)) "Teams" else if (source.equals("Untis", true)) "Untis" else source,
-                Color.argb(22, Color.red(sourceColor), Color.green(sourceColor), Color.blue(sourceColor)),
-                sourceColor
-            ),
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        )
-        if (item.optBoolean("isNew", true)) {
-            topRow.addView(HamzaUi.softPill(this, "جديد", 0xFFFFE9EA.toInt(), HamzaUi.danger))
-        }
-        body.addView(topRow)
+        top.addView(HamzaUi.title(this, label, 19f).apply {
+            maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
-        body.addView(HamzaUi.title(this, title, 18.5f), HamzaUi.marginTop(this, 10))
-        val due = item.optInt("dueDate", 0)
-        if (due > 0) {
-            body.addView(HamzaUi.subtitle(this, "التسليم: ${formatUntisDate(due)}"), HamzaUi.marginTop(this, 3))
+        val badge = when {
+            HomeworkFeedPresentation.isFinished(item) -> Triple("مكتمل", 0xFFEAF6EF.toInt(), HamzaUi.green)
+            isHomework && HomeworkFeedPresentation.isUrgent(item) ->
+                Triple(HomeworkFeedPresentation.deadlineLabel(item), 0xFFFFE9EA.toInt(), HamzaUi.danger)
+            isHomework && HomeworkFeedPresentation.dueRank(item) == 2 ->
+                Triple("التسليم بكرة", 0xFFFFEFE2.toInt(), HamzaUi.amber)
+            else -> Triple(
+                if (isHomework) HomeworkFeedPresentation.deadlineLabel(item) else "تحديث",
+                0xFFE8F1FF.toInt(), HamzaUi.blue
+            )
         }
-        body.addView(TextView(this).apply {
-            text = bodyText.ifBlank { "المصدر لم يرسل وصفًا إضافيًا." }
-            textSize = 15.5f
+        top.addView(HamzaUi.softPill(this, badge.first, badge.second, badge.third))
+        body.addView(top)
+
+        val sourceLabel = when {
+            source.equals("Teams", true) -> "Teams"
+            source.equals("Untis", true) -> "WebUntis"
+            else -> "تمت إضافته"
+        }
+        val metadata = buildString {
+            append(sourceLabel)
+            if (title != label) append(" • ").append(title.take(52))
+            val progress = item.optInt("progressPercent", 0)
+            if (isHomework && progress in 1..99) append(" • أنجز ${progress}%")
+        }
+        body.addView(HamzaUi.subtitle(this, metadata), HamzaUi.marginTop(this, 4))
+
+        val preview = TextView(this).apply {
+            text = HomeworkFeedPresentation.preview(item)
+            textSize = 15f
             gravity = Gravity.END
+            maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
             setTextColor(HamzaUi.ink)
-        }, HamzaUi.marginTop(this, 8))
+            tag = "assignment_preview_$key"
+        }
+        body.addView(preview, HamzaUi.marginTop(this, 10))
 
+        val nextStep = if (isHomework && !HomeworkFeedPresentation.isFinished(item))
+            HomeworkFeedPresentation.nextStep(item) else null
+        if (nextStep != null) {
+            body.addView(HamzaUi.subtitle(this, "الخطوة الجاية"), HamzaUi.marginTop(this, 11))
+            body.addView(studyCheckbox(item, nextStep, 0), HamzaUi.marginTop(this, 1))
+        }
         if (needsAttention) {
-            body.addView(
-                HamzaUi.statusBox(
-                    this,
-                    item.optString("attentionReason").ifBlank { "هذه المعلومة تحتاج مراجعة منك." },
-                    0xFFFFEFE2.toInt(),
-                    HamzaUi.amber
-                ),
-                HamzaUi.marginTop(this, 10)
-            )
-        }
-
-        val steps = item.optJSONArray("understoodSteps")?.toStringList().orEmpty()
-        if (steps.isNotEmpty() && interpretation.type == UpdateType.HOMEWORK) {
-            body.addView(
-                HamzaUi.statusBox(
-                    this,
-                    "المطلوب من حمزة\n" + steps.mapIndexed { index, step -> "${index + 1}. $step" }.joinToString("\n"),
-                    0xFFEFF5FC.toInt(),
-                    HamzaUi.blue
-                ),
-                HamzaUi.marginTop(this, 10)
-            )
-        }
-
-        if (referenceDetected) {
-            val bookMessage = when {
-                resolved?.status == ResolutionStatus.RESOLVED && resolved.book != null ->
-                    "${resolved.book.subject} • ${resolved.book.title}\nصفحة ${page ?: "?"}" +
-                        if (exercises.isNotEmpty()) " • تمرين ${exercises.joinToString(", ")}" else ""
-                bookStore.allBooks().isEmpty() -> "تم اكتشاف صفحة ${page ?: "?"}، لكن لم تتم إضافة كتاب لهذه المادة بعد."
-                else -> "تم اكتشاف صفحة ${page ?: "?"}، والكتاب يحتاج تأكيد."
-            }
-            body.addView(
-                HamzaUi.statusBox(this, bookMessage, 0xFFEAF6EF.toInt(), HamzaUi.green),
-                HamzaUi.marginTop(this, 10)
-            )
-            if (resolved?.book == null) {
-                body.addView(HamzaUi.secondaryButton(this, "ربط الكتاب").apply {
-                    tag = "assignment_book_${item.optLong("timestamp")}"
-                    setOnClickListener { startActivity(Intent(this@MainActivity, BookLibraryActivity::class.java)) }
-                }, HamzaUi.marginTop(this, 8))
-            }
-            body.addView(HamzaUi.primaryButton(this, "تصوير حل حمزة بعد الانتهاء").apply {
-                tag = "assignment_capture_${item.optLong("timestamp")}"
-                setOnClickListener {
-                    startActivity(Intent(this@MainActivity, StudentWorkCaptureActivity::class.java).apply {
-                        putExtra(
-                            StudentWorkCaptureActivity.EXTRA_ASSIGNMENT_FINGERPRINT,
-                            item.optString("externalId")
-                                .ifBlank { item.optString("contentFingerprint") }
-                                .ifBlank { item.optLong("timestamp").toString() }
-                        )
-                        putExtra(StudentWorkCaptureActivity.EXTRA_SUBJECT, subject)
-                        putExtra(StudentWorkCaptureActivity.EXTRA_BOOK_ID, resolved?.book?.id.orEmpty())
-                        putExtra(StudentWorkCaptureActivity.EXTRA_PAGE, page ?: 0)
-                        putExtra(StudentWorkCaptureActivity.EXTRA_EXERCISE, exercises.firstOrNull().orEmpty())
-                    })
-                }
+            body.addView(HamzaUi.statusBox(
+                this,
+                "راجع المطلوب • " + item.optString("attentionReason").ifBlank { "المعلومة تحتاج تأكيد." },
+                0xFFFFEFE2.toInt(), HamzaUi.amber
+            ).apply {
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
             }, HamzaUi.marginTop(this, 8))
         }
 
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val sourceUrl = item.optString("sourceUrl")
-        val canOpenSource = sourceUrl.isNotBlank() || source.equals("Teams", true) || source.equals("Untis", true)
+        val primaryActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         if (canOpenSource) {
-            actions.addView(HamzaUi.secondaryButton(this, "فتح المصدر").apply {
+            primaryActions.addView(HamzaUi.primaryButton(this, "فتح الواجب").apply {
                 tag = "assignment_source_${item.optLong("timestamp")}"
                 setOnClickListener {
                     if (sourceUrl.isNotBlank()) {
@@ -351,44 +323,113 @@ class MainActivity : AppCompatActivity() {
                         openSourceApp(source)
                     }
                 }
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.15f).apply {
                 marginEnd = HamzaUi.dp(this@MainActivity, 4)
             })
         }
-        if (needsAttention) {
-            actions.addView(HamzaUi.secondaryButton(this, "تم التعامل", HamzaUi.amber).apply {
-                tag = "assignment_resolve_${item.optLong("timestamp")}"
-                setOnClickListener {
-                    resolveAttention(item)
-                    refreshFeed()
-                }
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = HamzaUi.dp(this@MainActivity, 4)
-            })
-        } else if (item.optBoolean("isNew", true)) {
-            actions.addView(HamzaUi.secondaryButton(this, "تمت المراجعة").apply {
-                tag = "assignment_review_${item.optLong("timestamp")}"
-                setOnClickListener {
-                    markAsReviewed(item)
-                    refreshFeed()
-                }
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = HamzaUi.dp(this@MainActivity, 4)
-            })
-        }
-        if (actions.isNotEmpty()) {
-            body.addView(actions, HamzaUi.marginTop(this, 10))
-        }
-
-        body.addView(HamzaUi.subtitle(this, formatTime(item.optLong("timestamp"))), HamzaUi.marginTop(this, 8))
-        card.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
+        primaryActions.addView(HamzaUi.secondaryButton(
+            this, if (expanded) "إخفاء التفاصيل" else "التفاصيل"
         ).apply {
-            bottomMargin = HamzaUi.dp(this@MainActivity, 10)
+            tag = "assignment_expand_${item.optLong("timestamp")}"
+            setOnClickListener {
+                if (expanded) expandedItems.remove(key) else expandedItems.add(key)
+                refreshFeed()
+            }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        body.addView(primaryActions, HamzaUi.marginTop(this, 12))
+
+        if (expanded) {
+            val raw = item.optString("bigText").ifBlank { item.optString("text") }
+            body.addView(HamzaUi.section(this, "التعليمات الكاملة"))
+            body.addView(TextView(this).apply {
+                text = raw.ifBlank { "لا توجد تفاصيل إضافية. راجع المصدر الرسمي." }
+                textSize = 15f
+                gravity = Gravity.END
+                setTextColor(HamzaUi.ink)
+                tag = "assignment_full_text_$key"
+            }, HamzaUi.marginTop(this, 4))
+
+            val tasks = item.optJSONArray("taskChecklist")
+            if (tasks != null && isHomework && tasks.length() > 0) {
+                body.addView(HamzaUi.section(this, "خطوات الواجب"))
+                for (i in 0 until tasks.length()) {
+                    val task = tasks.optJSONObject(i) ?: continue
+                    if (task.optString("id").isBlank() || task === nextStep) continue
+                    body.addView(studyCheckbox(item, task, i), HamzaUi.marginTop(this, 2))
+                }
+            }
+
+            if (isHomework) {
+                val referenceDetected = item.optBoolean("bookReferenceDetected", false)
+                val resolved = if (referenceDetected)
+                    BookAssignmentResolver(bookStore).resolve(subject, title, raw) else null
+                val exercises = item.optJSONArray("bookExercises")?.toStringList().orEmpty()
+                val page = item.optInt("bookPage", 0).takeIf { it > 0 } ?: resolved?.reference?.page
+                if (referenceDetected) {
+                    val bookMessage = when {
+                        resolved?.status == ResolutionStatus.RESOLVED && resolved.book != null ->
+                            "${resolved.book.subject} • ${resolved.book.title} • صفحة ${page ?: "?"}"
+                        else -> "الواجب يشير لصفحة في كتاب؛ تأكد من ربط الكتاب الصحيح."
+                    }
+                    body.addView(HamzaUi.statusBox(this, bookMessage, 0xFFEAF6EF.toInt(), HamzaUi.green),
+                        HamzaUi.marginTop(this, 8))
+                    if (resolved?.book == null) {
+                        body.addView(HamzaUi.secondaryButton(this, "ربط الكتاب").apply {
+                            tag = "assignment_book_${item.optLong("timestamp")}"
+                            setOnClickListener { startActivity(Intent(this@MainActivity, BookLibraryActivity::class.java)) }
+                        }, HamzaUi.marginTop(this, 6))
+                    }
+                }
+                body.addView(HamzaUi.secondaryButton(this, "تصوير حل حمزة").apply {
+                    tag = "assignment_capture_${item.optLong("timestamp")}"
+                    setOnClickListener {
+                        startActivity(Intent(this@MainActivity, StudentWorkCaptureActivity::class.java).apply {
+                            putExtra(StudentWorkCaptureActivity.EXTRA_ASSIGNMENT_FINGERPRINT, key)
+                            putExtra(StudentWorkCaptureActivity.EXTRA_SUBJECT, subject)
+                            putExtra(StudentWorkCaptureActivity.EXTRA_BOOK_ID, resolved?.book?.id.orEmpty())
+                            putExtra(StudentWorkCaptureActivity.EXTRA_PAGE, page ?: 0)
+                            putExtra(StudentWorkCaptureActivity.EXTRA_EXERCISE, exercises.firstOrNull().orEmpty())
+                        })
+                    }
+                }, HamzaUi.marginTop(this, 8))
+            }
+            if (needsAttention) {
+                body.addView(HamzaUi.secondaryButton(this, "تمت المراجعة والتأكد", HamzaUi.amber).apply {
+                    tag = "assignment_resolve_${item.optLong("timestamp")}"
+                    setOnClickListener { resolveAttention(item); refreshFeed() }
+                }, HamzaUi.marginTop(this, 6))
+            } else if (item.optBoolean("isNew", false)) {
+                body.addView(HamzaUi.secondaryButton(this, "اطلعت على التحديث").apply {
+                    tag = "assignment_review_${item.optLong("timestamp")}"
+                    setOnClickListener { markAsReviewed(item); refreshFeed() }
+                }, HamzaUi.marginTop(this, 6))
+            }
+            val createdAt = formatTime(item.optLong("timestamp"))
+            if (createdAt.isNotBlank()) {
+                body.addView(HamzaUi.subtitle(this, "آخر تحديث: $createdAt"), HamzaUi.marginTop(this, 8))
+            }
         }
+        card.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = HamzaUi.dp(this@MainActivity, 10) }
         return card
     }
+
+    private fun studyCheckbox(item: JSONObject, task: JSONObject, index: Int): CheckBox =
+        CheckBox(this).apply {
+            text = task.optString("title")
+            textSize = 15f
+            maxLines = 3
+            gravity = Gravity.CENTER_VERTICAL
+            minHeight = HamzaUi.dp(this@MainActivity, 48)
+            setTextColor(HamzaUi.ink)
+            isChecked = task.optBoolean("done", false)
+            tag = "assignment_task_${item.optLong("timestamp")}_$index"
+            setOnClickListener {
+                updateChecklistStep(item, task.optString("id"), isChecked)
+                refreshFeed()
+            }
+        }
 
     private fun processIncomingShare(incoming: Intent?) {
         if (incoming?.action != Intent.ACTION_SEND) return
@@ -440,7 +481,7 @@ class MainActivity : AppCompatActivity() {
             put("attentionReason", if (interpretation.needsFullText) "النص لا يحتوي تفاصيل كافية لفهم المطلوب بدقة." else "")
             put("attentionResolved", false)
         }
-        dataFile.appendText(AgentOrchestrator.enrich(item).toString() + "\n")
+        SchoolFeedStore.append(this, AgentOrchestrator.enrich(item))
     }
 
     private fun showShareStatus(message: String) {
@@ -448,20 +489,15 @@ class MainActivity : AppCompatActivity() {
         shareStatusText.visibility = View.VISIBLE
     }
 
-    private fun readAndUpgradeNotifications(): List<JSONObject> {
-        if (!dataFile.exists()) return emptyList()
-        var changed = false
-        val items = dataFile.readLines()
-            .mapNotNull { runCatching { JSONObject(it) }.getOrNull() }
-            .map { item ->
+    private fun readAndUpgradeNotifications(): List<JSONObject> =
+        SchoolFeedStore.edit(this) { entries ->
+            entries.forEachIndexed { index, item ->
                 if (item.optString("agentPipelineVersion") != "3.1") {
-                    changed = true
-                    AgentOrchestrator.enrich(item)
-                } else item
+                    entries[index] = AgentOrchestrator.enrich(item)
+                }
             }
-        if (changed) writeItems(items)
-        return items
-    }
+            entries.toList()
+        }
 
     private fun markAsReviewed(target: JSONObject) = rewriteTarget(target) { it.put("isNew", false) }
 
@@ -471,15 +507,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun rewriteTarget(target: JSONObject, update: (JSONObject) -> Unit) {
-        val updated = readAndUpgradeNotifications().map { item ->
-            if (sameItem(item, target)) update(item)
-            item
+        SchoolFeedStore.edit(this) { entries ->
+            entries.forEach { item -> if (sameItem(item, target)) update(item) }
         }
-        writeItems(updated)
     }
 
-    private fun writeItems(items: List<JSONObject>) {
-        dataFile.writeText(items.joinToString("\n") { it.toString() } + if (items.isNotEmpty()) "\n" else "")
+    private fun updateChecklistStep(target: JSONObject, taskId: String, done: Boolean) {
+        SchoolFeedStore.edit(this) { entries ->
+            val item = entries.firstOrNull { sameItem(it, target) } ?: return@edit
+            val tasks = item.optJSONArray("taskChecklist") ?: return@edit
+            var completed = 0
+            for (index in 0 until tasks.length()) {
+                val task = tasks.optJSONObject(index) ?: continue
+                if (task.optString("id") == taskId) task.put("done", done)
+                if (task.optBoolean("done", false)) completed++
+            }
+            val percent = if (tasks.length() == 0) 0 else (completed * 100 / tasks.length())
+            item.put("progressPercent", percent)
+            item.put("progressStatus", when {
+                percent >= 100 -> "DONE"
+                percent > 0 -> "IN_PROGRESS"
+                else -> "NOT_STARTED"
+            })
+        }
     }
 
     private fun sameItem(a: JSONObject, b: JSONObject): Boolean {

@@ -66,6 +66,32 @@ class StudySupervisorAgentTest {
         assertTrue(report.actions.isEmpty())
     }
 
+    @Test fun locallyFinishedChecklistIsNotPresentedAsOpenHomework() {
+        val done = homework("local-done", "Math", 20260916, "OFFICIAL")
+            .apply { put("progressPercent", 100) }
+        val report = engine.build(listOf(done), emptyList())
+        assertEquals(SupervisorStatus.CLEAR, report.status)
+        assertTrue(report.actions.isEmpty())
+    }
+
+    @Test fun schoolAnnouncementsAreNotInventedAsStudyTasks() {
+        val announcement = homework("notice", "School trip", 20260916, "OFFICIAL")
+            .apply { put("updateType", "SCHOOL_MESSAGE") }
+        val report = engine.build(listOf(announcement), emptyList())
+        assertEquals(SupervisorStatus.CLEAR, report.status)
+    }
+
+    @Test fun cacheFingerprintChangesWithDateAndLocalCompletion() {
+        val item = homework("fingerprint", "Deutsch", 20260917, "OFFICIAL")
+        val date = LocalDate.of(2026, 9, 16)
+        val a = StudySupervisorEngine.inputFingerprint(listOf(item), emptyList(), date)
+        val b = StudySupervisorEngine.inputFingerprint(listOf(item), emptyList(), date.plusDays(1))
+        assertFalse(a == b)
+        item.put("progressPercent", 100)
+        val c = StudySupervisorEngine.inputFingerprint(listOf(item), emptyList(), date)
+        assertFalse(a == c)
+    }
+
     @Test fun missingDeadlineRequiresParentConfirmationInsteadOfInventingDate() {
         val item = homework(
             id = "no-date",

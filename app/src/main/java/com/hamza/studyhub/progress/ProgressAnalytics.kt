@@ -36,10 +36,10 @@ object ProgressAnalytics {
         val completed = items.count { it.optBoolean("completed", false) || it.optInt("progressPercent", 0) >= 100 }
         val attention = items.count { it.optBoolean("needsAttention", false) && !it.optBoolean("attentionResolved", false) }
         val overdue = items.count { item ->
-            if (item.optBoolean("completed", false)) return@count false
+            if (item.optBoolean("completed", false) || item.optInt("progressPercent", 0) >= 100) return@count false
             parseUntisDate(item.optInt("dueDate", 0))?.isBefore(today) == true
         }
-        val inProgress = items.count { it.optInt("progressPercent", 0) in 1..99 }
+        val inProgress = items.count { !it.optBoolean("completed", false) && it.optInt("progressPercent", 0) in 1..99 }
 
         val bySubject = items
             .groupBy { it.optString("subject").ifBlank { inferSubjectFromTitle(it.optString("title")) } }
