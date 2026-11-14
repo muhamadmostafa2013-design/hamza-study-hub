@@ -221,7 +221,6 @@ class MainActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(0, -2, 1f).apply {
                 marginStart = HamzaUi.dp(this@MainActivity, 8)
             })
-        )
         root.addView(sourcesRow, HamzaUi.marginTop(this, 4))
         return root
     }
