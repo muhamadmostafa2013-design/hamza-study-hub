@@ -22,6 +22,8 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 /**
  * Visual hierarchy / progressive-disclosure smoke checks.
@@ -32,6 +34,9 @@ import java.io.File
 class HomeworkScreenVisualTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
     private val feed: File get() = File(context.filesDir, "school_notifications.jsonl")
+    private val today: LocalDate get() = LocalDate.now()
+    private fun date(offsetDays: Long): Int =
+        today.plusDays(offsetDays).format(DateTimeFormatter.BASIC_ISO_DATE).toInt()
 
     @Before fun reset() {
         listOf("school_notifications.jsonl", "school_notifications.jsonl.bak",
@@ -43,7 +48,7 @@ class HomeworkScreenVisualTest {
         val instructions = "Read your homework carefully, answer all questions in the workbook, " +
             "and use the attached book page. Make sure you upload your written answers when complete. " +
             "Please also revise the new vocabulary words from class."
-        write(homework(101L, 20261115, instructions = instructions, steps = 4)
+        write(homework(101L, date(1), instructions = instructions, steps = 4)
             .put("needsAttention", true).put("attentionReason", "Confirm the attached worksheet"))
         val root = launch().window.decorView
 
@@ -64,8 +69,8 @@ class HomeworkScreenVisualTest {
     }
 
     @Test fun defaultScreenOnlyShowsOpenHomeworkAndTabsRevealHistory() {
-        val due = homework(201L, 20261115)
-        val completed = homework(202L, 20261114).put("progressPercent", 100)
+        val due = homework(201L, date(1))
+        val completed = homework(202L, date(0)).put("progressPercent", 100)
         val notice = homework(203L, 0, steps = 0)
             .put("title", "Reminder: parents meeting").put("updateType", "SCHOOL_MESSAGE")
         write(due, completed, notice)
@@ -83,9 +88,9 @@ class HomeworkScreenVisualTest {
 
     @Test fun displayRanksUrgentHomeworkAheadOfFarFutureAndOldHistory() {
         write(
-            homework(301L, 20261201),
-            homework(302L, 20261114),
-            homework(303L, 20260901)
+            homework(301L, date(17)),
+            homework(302L, date(0)),
+            homework(303L, date(-80))
         )
         val root = launch().window.decorView
         // Urgent appears first even though its data was not the newest.
@@ -93,8 +98,33 @@ class HomeworkScreenVisualTest {
         assertEquals("homework_card_303", cards(root).last().tag.toString())
     }
 
+    @Test fun compactPhoneWidthKeepsPriorityBadgeAndTitleWithinTheCard() {
+        write(homework(351L, date(0)))
+        val root = launch().window.decorView
+        val density = context.resources.displayMetrics.density
+        val width = (360 * density).toInt()
+        val height = (760 * density).toInt()
+        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, width, height)
+
+        val card = tagged<View>(root, "homework_card_351")
+        val badge = tagged<View>(root, "assignment_due_351")
+        val title = tagged<TextView>(root, "assignment_title_351")
+        assertTrue("Card should fit mobile width", card.width > 0 && card.width <= width)
+        assertTrue("Date badge must be laid out", badge.width > 0)
+        assertTrue("Assignment title must retain space", title.width > 0)
+        val cardLocation = IntArray(2)
+        val badgeLocation = IntArray(2)
+        card.getLocationOnScreen(cardLocation)
+        badge.getLocationOnScreen(badgeLocation)
+        assertTrue("Badge should stay within card bounds",
+            badgeLocation[0] >= cardLocation[0] &&
+            badgeLocation[0] + badge.width <= cardLocation[0] + card.width)
+    }
+
     @Test fun schoolSourceUtilitiesAreHiddenUntilRequested() {
-        write(homework(401L, 20261115))
+        write(homework(401L, date(1)))
         val root = launch().window.decorView
         assertFalse(tagged<Button>(root, "feed_sources").isShown)
         assertFalse(tagged<Button>(root, "feed_books").isShown)
@@ -104,7 +134,7 @@ class HomeworkScreenVisualTest {
     }
 
     @Test fun filtersAndChecklistMeetMinimumTouchTargetGuidance() {
-        write(homework(501L, 20261115, steps = 2))
+        write(homework(501L, date(1), steps = 2))
         val root = launch().window.decorView
         val density = context.resources.displayMetrics.density
         val controls = listOf("feed_todo", "feed_attention", "feed_all",
