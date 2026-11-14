@@ -83,7 +83,7 @@ object HamzaUi {
         isAllCaps = false
         textSize = 14f
         cornerRadius = dp(context, 13)
-        minHeight = dp(context, 46)
+        minHeight = dp(context, 48)
         backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
         strokeColor = ColorStateList.valueOf(color)
         strokeWidth = dp(context, 1)

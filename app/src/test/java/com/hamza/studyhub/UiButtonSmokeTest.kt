@@ -5,6 +5,7 @@ import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CheckBox
 import androidx.test.core.app.ApplicationProvider
 import com.hamza.studyhub.books.BookLibraryActivity
 import com.hamza.studyhub.learning.StudentWorkCaptureActivity
@@ -56,13 +57,32 @@ class UiButtonSmokeTest {
             assertTrue("Unwired button: ${button.text} tag=${button.tag}", button.hasOnClickListeners())
         }
         assertTrue(buttons.any { it.tag?.toString()?.startsWith("assignment_capture_") == true })
-        assertTrue(buttons.any { it.tag?.toString()?.startsWith("assignment_resolve_") == true })
+        val details = allButtons(activity.window.decorView).first {
+            it.tag?.toString()?.startsWith("assignment_details_") == true
+        }
+        assertTrue(details.performClick())
+        assertTrue(allButtons(activity.window.decorView).any {
+            it.tag?.toString()?.startsWith("assignment_resolve_") == true
+        })
         assertTrue(buttons.any { it.tag?.toString()?.startsWith("assignment_source_") == true })
+    }
+
+    @Test fun checklistCheckboxUpdatesSavedProgress() {
+        seedAttentionHomework()
+        val activity = launch(MainActivity::class.java)
+        val checkbox = allButtons(activity.window.decorView).filterIsInstance<CheckBox>().first()
+        assertTrue(checkbox.performClick())
+        val saved = feedFile.readLines().map { JSONObject(it) }.first()
+        assertTrue(saved.getJSONArray("taskChecklist").getJSONObject(0).getBoolean("done"))
+        assertTrue(saved.getInt("progressPercent") > 0)
     }
 
     @Test fun resolveAttentionButtonPersistsResolvedState() {
         seedAttentionHomework()
         val activity = launch(MainActivity::class.java)
+        val details = allButtons(activity.window.decorView)
+            .first { it.tag?.toString()?.startsWith("assignment_details_") == true }
+        assertTrue(details.performClick())
         val resolve = allButtons(activity.window.decorView)
             .first { it.tag?.toString()?.startsWith("assignment_resolve_") == true }
         assertTrue(resolve.performClick())
@@ -110,7 +130,7 @@ class UiButtonSmokeTest {
     private fun allButtons(root: View): List<Button> {
         val result = mutableListOf<Button>()
         fun walk(view: View) {
-            if (view is Button && view.visibility == View.VISIBLE) result += view
+            if (view is Button && view.isShown) result += view
             if (view is ViewGroup) for (i in 0 until view.childCount) walk(view.getChildAt(i))
         }
         walk(root)

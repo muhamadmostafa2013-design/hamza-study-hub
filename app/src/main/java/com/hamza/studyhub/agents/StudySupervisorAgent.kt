@@ -42,7 +42,7 @@ class StudySupervisorEngine(
 ) {
     fun build(feed: List<JSONObject>, attempts: List<StudentAttempt>): StudySupervisorReport {
         val today = todayProvider()
-        val fingerprint = inputFingerprint(feed, attempts)
+        val fingerprint = inputFingerprint(feed, attempts, today)
         val evidenceKeys = feed.mapNotNull(::evidenceKey).toSet()
 
         val ranked = feed.mapNotNull { item -> candidate(item, attempts, today) }
@@ -103,7 +103,10 @@ class StudySupervisorEngine(
     }
 
     private fun candidate(item: JSONObject, attempts: List<StudentAttempt>, today: LocalDate): Candidate? {
-        if (item.optBoolean("completed", false)) return null
+        if (item.optBoolean("completed", false) || item.optInt("progressPercent", 0) >= 100) return null
+        // General notices and timetable changes are not homework assignments.
+        val type = item.optString("updateType")
+        if (type.isNotBlank() && type != "HOMEWORK") return null
 
         val title = item.optString("title").ifBlank { "تحديث مدرسي" }
         val subject = item.optString("subject").ifBlank { title.substringAfter("•", "").trim() }
@@ -197,7 +200,11 @@ class StudySupervisorEngine(
     companion object {
         private const val MAX_ACTIONS = 5
 
-        fun inputFingerprint(feed: List<JSONObject>, attempts: List<StudentAttempt>): String {
+        fun inputFingerprint(
+            feed: List<JSONObject>,
+            attempts: List<StudentAttempt>,
+            today: LocalDate = LocalDate.now()
+        ): String {
             val feedPart = feed.sortedBy { evidenceKey(it).orEmpty() }.joinToString("\n") { item ->
                 listOf(
                     evidenceKey(item).orEmpty(),
@@ -205,13 +212,18 @@ class StudySupervisorEngine(
                     item.optString("bigText").ifBlank { item.optString("text") },
                     item.optInt("dueDate", 0).toString(),
                     item.optBoolean("completed", false).toString(),
+                    item.optInt("progressPercent", 0).toString(),
+                    item.optBoolean("isNew", false).toString(),
+                    item.optString("updateType"),
                     item.optBoolean("needsAttention", false).toString(),
                     item.optBoolean("attentionResolved", false).toString(),
                     item.optString("evidenceTrust")
                 ).joinToString("|")
             }
             val attemptsPart = attempts.sortedBy { it.id }.joinToString("\n") { "${it.id}|${it.assignmentFingerprint}|${it.attemptNumber}" }
-            return sha256("$feedPart\n--attempts--\n$attemptsPart")
+            // A new school day can change due-today/overdue priorities even when
+            // no server record was edited.
+            return sha256("$today\n$feedPart\n--attempts--\n$attemptsPart")
         }
 
         private fun evidenceKey(item: JSONObject): String? = sequenceOf(

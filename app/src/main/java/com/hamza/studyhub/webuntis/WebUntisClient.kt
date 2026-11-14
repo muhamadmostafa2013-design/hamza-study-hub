@@ -218,7 +218,8 @@ class WebUntisClient(private val config: WebUntisConfig) {
         return (URL(endpoint).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 20_000
-            instanceFollowRedirects = true
+            // Never forward TOTP-authenticated requests or session cookies to redirect targets.
+            instanceFollowRedirects = false
             setRequestProperty(
                 "User-Agent",
                 "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36 HamzaStudyHub/0.2"

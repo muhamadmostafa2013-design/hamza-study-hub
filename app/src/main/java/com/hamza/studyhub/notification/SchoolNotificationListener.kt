@@ -5,6 +5,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.hamza.studyhub.agents.AgentOrchestrator
+import com.hamza.studyhub.sources.SchoolFeedStore
 import org.json.JSONObject
 import java.io.File
 
@@ -61,28 +62,24 @@ class SchoolNotificationListener : NotificationListenerService() {
 
         val item = AgentOrchestrator.enrich(rawItem)
 
-        if (isRecentDuplicate(item)) {
-            Log.d(TAG, "Ignored duplicate $source notification: $title")
-            return
+        val added = SchoolFeedStore.edit(this) { entries ->
+            if (isRecentDuplicate(entries, item)) false
+            else {
+                entries.add(item)
+                true
+            }
         }
-
-        appendNotification(item)
-        Log.d(TAG, "Captured and agent-processed $source notification: $title")
+        Log.d(TAG, if (added) "Captured $source notification" else "Ignored duplicate $source notification")
     }
 
-    private fun isRecentDuplicate(candidate: JSONObject): Boolean {
-        val file = File(filesDir, "school_notifications.jsonl")
-        if (!file.exists()) return false
-
+    private fun isRecentDuplicate(existing: List<JSONObject>, candidate: JSONObject): Boolean {
         val candidateSource = candidate.optString("source")
         val candidateTitle = candidate.optString("title")
         val candidateBody = candidate.optString("bigText")
         val candidateTime = candidate.optLong("timestamp")
 
-        return file.readLines()
-            .asReversed()
+        return existing.asReversed()
             .take(25)
-            .mapNotNull { runCatching { JSONObject(it) }.getOrNull() }
             .any { old ->
                 old.optString("source") == candidateSource &&
                     old.optString("title") == candidateTitle &&
@@ -91,8 +88,4 @@ class SchoolNotificationListener : NotificationListenerService() {
             }
     }
 
-    private fun appendNotification(item: JSONObject) {
-        val file = File(filesDir, "school_notifications.jsonl")
-        file.appendText(item.toString() + "\n")
-    }
-}
+ }
