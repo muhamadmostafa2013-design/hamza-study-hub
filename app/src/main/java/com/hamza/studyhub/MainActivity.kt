@@ -387,7 +387,7 @@ class MainActivity : AppCompatActivity() {
                 max = 100
                 this.progress = progress
                 progressTintList = ColorStateList.valueOf(HamzaUi.green)
-                minHeight = HamzaUi.dp(this@MainActivity, 5)
+                setMinimumHeight(HamzaUi.dp(this@MainActivity, 5))
             }, HamzaUi.marginTop(this, 4))
             firstSteps.forEach { (index, task) ->
                 content.addView(checklistControl(item, index, task), HamzaUi.marginTop(this, 2))
