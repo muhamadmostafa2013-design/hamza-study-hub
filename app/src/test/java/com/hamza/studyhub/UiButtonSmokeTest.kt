@@ -1,6 +1,7 @@
 package com.hamza.studyhub
 
 import android.app.Activity
+import androidx.work.testing.WorkManagerTestInitHelper
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
@@ -31,6 +32,7 @@ class UiButtonSmokeTest {
     private val feedFile: File get() = File(context.filesDir, "school_notifications.jsonl")
 
     @Before fun cleanState() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
         listOf("school_notifications.jsonl", "book_library.json", "student_attempts.jsonl").forEach {
             File(context.filesDir, it).delete()
         }
