@@ -290,10 +290,11 @@ class MainActivity : AppCompatActivity() {
         val content = HamzaUi.cardContent(card)
         val headline = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END
+            gravity = Gravity.START
         }
         headline.addView(HamzaUi.title(this, heading, 19f).apply {
             tag = "assignment_title_$idTag"
+            gravity = Gravity.START
             maxLines = 2
         }, LinearLayout.LayoutParams(-1, -2))
 
@@ -312,7 +313,7 @@ class MainActivity : AppCompatActivity() {
                 tag = "assignment_due_$idTag"
             }, LinearLayout.LayoutParams(-2, -2).apply {
                 topMargin = HamzaUi.dp(this@MainActivity, 5)
-                gravity = Gravity.END
+                gravity = Gravity.START
             })
         }
         content.addView(headline)
@@ -331,7 +332,7 @@ class MainActivity : AppCompatActivity() {
             tag = "assignment_summary_$idTag"
             text = preview
             textSize = 15.5f
-            gravity = Gravity.END
+            gravity = Gravity.START
             setTextColor(HamzaUi.ink)
             maxLines = 3
             ellipsize = android.text.TextUtils.TruncateAt.END
