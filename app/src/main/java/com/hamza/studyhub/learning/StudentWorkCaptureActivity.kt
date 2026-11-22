@@ -10,9 +10,9 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.hamza.studyhub.R
+import com.hamza.studyhub.ocr.OnDevicePhotoText
+import com.hamza.studyhub.ocr.PhotoTextReview
 import com.hamza.studyhub.ui.HamzaUi
 import java.io.File
 import java.util.UUID
@@ -20,6 +20,7 @@ import java.util.UUID
 class StudentWorkCaptureActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private var pendingCameraName: String? = null
+    private var visibleAttemptId: String? = null
     private val store by lazy { LearningEvidenceStore(this) }
 
     private val cameraLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
@@ -93,8 +94,7 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
         statusText.gravity = Gravity.END
         content.addView(statusText, HamzaUi.marginTop(this, 14))
 
-        content.addView(HamzaUi.subtitle(this,
-            "تُحفظ الصورة حتى إن لم يمكن قراءة النص. القراءة التلقائية لا تدعم الكتابة العربية."), HamzaUi.marginTop(this, 14))
+        content.addView(HamzaUi.subtitle(this, getString(R.string.photo_ocr_attempt_note)), HamzaUi.marginTop(this, 14))
         return ScrollView(this).apply {
             isFillViewport = true
             addView(content)
@@ -126,25 +126,27 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
             statusText.text = "تعذر تسجيل المحاولة. جرّب مرة أخرى."
             return
         }
-        statusText.text = "تم حفظ المحاولة رقم ${attempt.attemptNumber}. جاري محاولة قراءة النص…"
-        fun finish(extractedText: String?) {
-            val savedText = !extractedText.isNullOrBlank() &&
-                runCatching { store.updateExtractedText(attempt.id, extractedText) }.getOrDefault(false)
-            if (!isDestroyed && !isFinishing) {
-                statusText.text = if (savedText)
-                    "تم حفظ المحاولة رقم ${attempt.attemptNumber} وقراءة نص مبدئي منها."
-                else "تم حفظ المحاولة رقم ${attempt.attemptNumber}. الصورة محفوظة حتى لو لم تُقرأ الكتابة بوضوح."
+        visibleAttemptId = attempt.id
+        fun showSavedPhoto() {
+            if (!isDestroyed && !isFinishing && visibleAttemptId == attempt.id) {
+                statusText.text = getString(R.string.photo_ocr_attempt_saved, attempt.attemptNumber)
             }
         }
-        runCatching { InputImage.fromFilePath(this, inputUri) }
-            .onSuccess { image ->
-                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                recognizer.process(image)
-                    .addOnSuccessListener { finish(it.text.trim().takeIf(String::isNotBlank)) }
-                    .addOnFailureListener { finish(null) }
-                    .addOnCompleteListener { recognizer.close() }
+        showSavedPhoto()
+        PhotoTextReview.chooseLanguage(this, onSelected = { language ->
+            statusText.text = getString(R.string.photo_ocr_reading)
+            OnDevicePhotoText.recognize(this, inputUri, language) { suggestion ->
+                if (isDestroyed || isFinishing || visibleAttemptId != attempt.id) return@recognize
+                showSavedPhoto()
+                PhotoTextReview.edit(this, suggestion, onSave = { confirmed ->
+                    val saved = runCatching { store.updateExtractedText(attempt.id, confirmed) }.getOrDefault(false)
+                    statusText.text = getString(
+                        if (saved) R.string.photo_ocr_attempt_saved_with_text else R.string.photo_ocr_attempt_text_error,
+                        attempt.attemptNumber
+                    )
+                })
             }
-            .onFailure { finish(null) }
+        })
     }
 
     private fun savePhotoAttempt(imageUri: String): StudentAttempt {

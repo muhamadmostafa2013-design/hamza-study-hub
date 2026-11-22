@@ -22,9 +22,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.isNotEmpty
 import com.google.android.material.button.MaterialButton
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.hamza.studyhub.agents.AgentOrchestrator
 import com.hamza.studyhub.books.BookAssignmentResolver
 import com.hamza.studyhub.books.BookLibraryActivity
@@ -34,6 +31,8 @@ import com.hamza.studyhub.homework.HomeworkScreenPolicy
 import com.hamza.studyhub.homework.HomeworkInterpreter
 import com.hamza.studyhub.homework.UpdateType
 import com.hamza.studyhub.learning.StudentWorkCaptureActivity
+import com.hamza.studyhub.ocr.OnDevicePhotoText
+import com.hamza.studyhub.ocr.PhotoTextReview
 import com.hamza.studyhub.sources.SchoolFeedStore
 import com.hamza.studyhub.teams.TeamsAuthStore
 import com.hamza.studyhub.teams.TeamsSyncWorker
@@ -70,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_TODAY_FOCUS = "com.hamza.studyhub.TODAY_FOCUS"
         private const val STATE_TODAY_FOCUS = "todayFocus"
+        private const val STATE_SHARE_FINISHED = "shareFinished"
         private const val STATE_EXPANDED = "expandedAssignments"
         fun todayFocusKey(item: JSONObject): String {
             for (field in listOf("externalId", "id", "notificationKey")) {
@@ -81,6 +81,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Retain only whether the user finished reviewing the share, never its content.
+    private var shareFinished = false
+    private var shareRevision = 0
+    private var photoDialog: AlertDialog? = null
     private val bookStore by lazy { BookLibraryStore(this) }
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -93,7 +97,8 @@ class MainActivity : AppCompatActivity() {
         savedInstanceState?.getStringArrayList(STATE_EXPANDED)?.let(expandedDetails::addAll)
         setContentView(buildScreen())
         requestNotificationPermissionIfNeeded()
-        processIncomingShare(intent)
+        shareFinished = savedInstanceState?.getBoolean(STATE_SHARE_FINISHED) == true
+        if (!shareFinished) processIncomingShare(intent)
         scheduleSources()
     }
 
@@ -101,11 +106,13 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         pendingTodayFocus?.let { outState.putString(STATE_TODAY_FOCUS, it) }
         outState.putStringArrayList(STATE_EXPANDED, ArrayList(expandedDetails.take(50)))
+        outState.putBoolean(STATE_SHARE_FINISHED, shareFinished)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        shareFinished = false
         if (intent.getBooleanExtra("open_attention", false)) feedMode = FeedMode.ATTENTION
         if (intent.action != Intent.ACTION_SEND) {
             pendingTodayFocus = intent.getStringExtra(EXTRA_TODAY_FOCUS)
@@ -572,6 +579,9 @@ class MainActivity : AppCompatActivity() {
         }
 
     private fun processIncomingShare(incoming: Intent?) {
+        shareRevision++
+        photoDialog?.dismiss()
+        photoDialog = null
         if (incoming?.action != Intent.ACTION_SEND) return
         when {
             incoming.type?.startsWith("text/") == true ->
@@ -581,25 +591,39 @@ class MainActivity : AppCompatActivity() {
             incoming.type?.startsWith("image/") == true -> {
                 @Suppress("DEPRECATION")
                 val uri = incoming.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
-                if (uri != null) readHomeworkScreenshot(uri)
+                if (uri?.scheme == "content") readHomeworkScreenshot(uri)
+                else showShareStatus(getString(R.string.image_open_failed))
             }
         }
     }
 
     private fun readHomeworkScreenshot(uri: Uri) {
-        showShareStatus("جاري قراءة صورة الواجب…")
-        runCatching { InputImage.fromFilePath(this, uri) }.onSuccess { image ->
-            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(image)
-                .addOnSuccessListener { result ->
-                    val text = result.text.trim()
-                    if (text.isBlank()) {
-                        showShareStatus("لم أستطع استخراج نص واضح من الصورة.")
-                    } else {
-                        confirmSharedContent("واجب مقروء من صورة", text, "Screenshot OCR")
-                    }
-                }
-                .addOnFailureListener { showShareStatus("حدث خطأ أثناء قراءة الصورة.") }
-        }.onFailure { showShareStatus("تعذر فتح الصورة.") }
+        val revision = shareRevision
+        fun cancelReview() {
+            if (revision == shareRevision) {
+                shareFinished = true
+                showShareStatus(getString(R.string.photo_ocr_not_saved))
+            }
+        }
+        photoDialog = PhotoTextReview.chooseLanguage(this, onSelected = { language ->
+            showShareStatus(getString(R.string.photo_ocr_reading))
+            OnDevicePhotoText.recognize(this, uri, language) { suggestion ->
+                if (revision != shareRevision || isFinishing || isDestroyed) return@recognize
+                showShareStatus(getString(R.string.shared_review_before_save))
+                photoDialog = PhotoTextReview.edit(this, suggestion, onSave = { confirmed ->
+                    val saved = runCatching {
+                        saveImportedContent(
+                            getString(R.string.photo_ocr_homework_title), confirmed, "Screenshot OCR"
+                        )
+                    }.isSuccess
+                    if (saved) {
+                        shareFinished = true
+                        showShareStatus(getString(R.string.shared_review_saved))
+                        refreshFeed()
+                    } else showShareStatus(getString(R.string.whatsapp_import_error))
+                }, onDismissed = ::cancelReview)
+            }
+        }, onDismissed = ::cancelReview)
     }
 
     private fun confirmSharedContent(title: String, text: String, method: String) {
@@ -613,9 +637,11 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(R.string.shared_review_title)
             .setMessage(getString(R.string.shared_review_preview, snippet))
-            .setNegativeButton(android.R.string.cancel, null)
+            .setNegativeButton(android.R.string.cancel) { _, _ -> shareFinished = true }
+            .setOnCancelListener { shareFinished = true }
             .setPositiveButton(R.string.whatsapp_import_save) { _, _ ->
                 if (runCatching { saveImportedContent(title, snippet, method) }.isSuccess) {
+                    shareFinished = true
                     showShareStatus(getString(R.string.shared_review_saved))
                     refreshFeed()
                 } else showShareStatus(getString(R.string.whatsapp_import_error))

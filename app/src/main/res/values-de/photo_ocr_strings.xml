@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="photo_ocr_language">Sprache des Bildtexts</string>
+    <string name="photo_ocr_arabic">Arabisch</string>
+    <string name="photo_ocr_latin">Deutsch oder lateinische Schrift</string>
+    <string name="photo_ocr_reading">Bild wird auf dem Gerät gelesen…</string>
+    <string name="photo_ocr_review">Text vor dem Speichern prüfen</string>
+    <string name="photo_ocr_text_hint">Text hier eingeben oder korrigieren</string>
+    <string name="photo_ocr_check_text">Der Text wurde automatisch vorgeschlagen. Prüfe vor dem Speichern alle Zahlen, Seiten und Aufgaben.</string>
+    <string name="photo_ocr_empty_text">Es wurde kein lesbarer Text gefunden. Gib ihn selbst ein oder brich ab.</string>
+    <string name="photo_ocr_long_text">Der Text ist länger als 2.000 Zeichen. Gib nur den wichtigen Teil ein oder brich ab.</string>
+    <string name="photo_ocr_save">Geprüften Text speichern</string>
+    <string name="photo_ocr_not_saved">Der Bildtext wurde nicht gespeichert.</string>
+    <string name="photo_ocr_homework_title">Hausaufgabe aus einem Bild</string>
+    <string name="photo_ocr_attempt_note">Das Foto wird zuerst gespeichert. Die Texterkennung ist optional und läuft auf dem Gerät. Druckschrift ist besser lesbar als Handschrift.</string>
+    <string name="photo_ocr_attempt_saved">Das Foto für Versuch %1$d wurde gespeichert.</string>
+    <string name="photo_ocr_attempt_saved_with_text">Versuch %1$d und der geprüfte Text wurden gespeichert.</string>
+    <string name="photo_ocr_attempt_text_error">Das Foto für Versuch %1$d wurde gespeichert, der Text aber nicht.</string>
+</resources>
