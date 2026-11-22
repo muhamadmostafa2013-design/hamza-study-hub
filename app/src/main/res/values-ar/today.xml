@@ -1,0 +1,31 @@
+<resources>
+    <string name="today_title">اليوم</string>
+    <string name="today_intro">واجباتك وخطوتك الجاية في مكان واحد.</string>
+    <string name="today_next">الواجب التالي</string>
+    <string name="today_no_assignment">لا يوجد واجب قادم محفوظ</string>
+    <string name="today_no_assignment_hint">تقدر تفتح قائمة الواجبات أو تضيف تعليمات وصلت لك.</string>
+    <string name="today_assignment_fallback">واجب مدرسي</string>
+    <string name="today_due">موعد التسليم: %1$s</string>
+    <string name="today_due_unknown">موعد التسليم غير محدد</string>
+    <string name="today_local">المعلومات محفوظة على الجهاز؛ قد تكون فيه تحديثات أحدث.</string>
+    <string name="today_read_error">تعذّر قراءة الواجبات المحفوظة. جرّب فتح الواجبات.</string>
+    <string name="today_start">ابدأ الواجب</string>
+    <string name="today_resume">كمّل الواجب</string>
+    <string name="today_links">المذاكرة</string>
+    <string name="today_homework">الواجبات</string>
+    <string name="today_books">الكتب</string>
+    <string name="today_bag">شنطة المدرسة</string>
+    <string name="today_plan">خطة المذاكرة</string>
+    <string name="today_parent">إعدادات ولي الأمر</string>
+    <string name="today_sources">مصادر المدرسة</string>
+    <string name="today_whatsapp">إضافة واجب من واتساب</string>
+    <string name="today_update">فحص تحديث التطبيق</string>
+    <string name="today_other_language">Deutsch</string>
+    <string name="today_unavailable">الواجبات غير متاحة</string>
+    <string name="today_unverified">%1$s • يحتاج تأكيد من المدرسة</string>
+    <string name="today_loading">جاري تحميل الواجبات…</string>
+    <string name="shared_review_title">راجع النص المشارك</string>
+    <string name="shared_review_before_save">راجع النص قبل ما تحفظه. لو فيه أسماء أو أرقام مش لازمة، الغِ العملية وانسخ المطلوب بس.</string>
+    <string name="shared_review_preview">راجع النص قبل ما تحفظه. لو فيه أسماء أو أرقام مش لازمة، الغِ العملية وانسخ المطلوب بس.\n\n%1$s</string>
+    <string name="shared_review_saved">تم حفظ النص المشارك.</string>
+</resources>

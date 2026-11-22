@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hamza Study Hub</string>
+    <string name="app_name" translatable="false">Hamza Study Hub</string>
     <string name="brand_name" translatable="false">HAMZA STUDY HUB</string>
 
     <string name="metric_new">%1$d\nالجديد</string>

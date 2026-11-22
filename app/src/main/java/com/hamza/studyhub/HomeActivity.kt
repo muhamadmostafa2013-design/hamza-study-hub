@@ -53,6 +53,7 @@ class HomeActivity : AppCompatActivity() {
         setTheme(R.style.Theme_HamzaStudyHub_Today)
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = true
         setContentView(buildScreen())
         if (WebUntisConfigStore.isConfigured(this)) WebUntisSyncWorker.schedule(this)
         if (TeamsAuthStore.account(this) != null) TeamsSyncWorker.schedule(this)

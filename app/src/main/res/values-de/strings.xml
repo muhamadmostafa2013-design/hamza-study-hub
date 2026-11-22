@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="metric_new">%1$d\nNeu</string>
+    <string name="metric_attention">%1$d\nBitte prüfen</string>
+    <string name="metric_attempts">%1$d\nVersuche</string>
+    <string name="metric_sources">%1$d/2\nQuellen</string>
+    <string name="home_source_summary">%1$s\n%2$s\n%3$d Nachschlagebücher</string>
+    <string name="source_sync_summary">%1$s • %2$s</string>
+    <string name="untis_sync_requested">Die WebUntis-Synchronisierung wird angefordert…</string>
+    <string name="qr_reading">QR-Code wird gelesen…</string>
+    <string name="qr_image_invalid">Das Bild enthält keinen gültigen WebUntis-QR-Code.</string>
+    <string name="qr_read_failed">Der QR-Code konnte nicht aus dem Bild gelesen werden.</string>
+    <string name="image_open_failed">Das Bild konnte nicht geöffnet werden.</string>
+    <string name="qr_invalid">Ungültiger QR-Code. Er muss mit untis://setschool beginnen.</string>
+    <string name="untis_connected_first_sync">%1$s ist verbunden. Die erste Synchronisierung läuft…</string>
+</resources>

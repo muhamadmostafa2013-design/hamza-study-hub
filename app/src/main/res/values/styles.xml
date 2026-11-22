@@ -18,7 +18,6 @@
         <item name="colorOnSurface">#161C26</item>
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowBackground">#F6F8FC</item>
     </style>
 
