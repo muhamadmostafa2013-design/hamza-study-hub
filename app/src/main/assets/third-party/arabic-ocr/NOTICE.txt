@@ -1,0 +1,9 @@
+Versions and notices for the native Arabic OCR library:
+Tesseract4Android 4.9.0 (Copyright 2019 Adaptech s.r.o., Robert Pösel)
+Tesseract OCR 5.5.1
+Leptonica 1.85.0
+libpng 1.6.48
+This software is based in part on the work of the Independent JPEG Group.
+
+License texts and IJG acknowledgement are included in this directory.
+Source: https://github.com/adaptech-cz/Tesseract4Android/tree/15c534717b1cb58261b58d4e4c1200c7f81f668c

@@ -16,14 +16,12 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.isNotEmpty
 import com.google.android.material.button.MaterialButton
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.hamza.studyhub.agents.AgentOrchestrator
 import com.hamza.studyhub.books.BookAssignmentResolver
 import com.hamza.studyhub.books.BookLibraryActivity
@@ -33,6 +31,8 @@ import com.hamza.studyhub.homework.HomeworkScreenPolicy
 import com.hamza.studyhub.homework.HomeworkInterpreter
 import com.hamza.studyhub.homework.UpdateType
 import com.hamza.studyhub.learning.StudentWorkCaptureActivity
+import com.hamza.studyhub.ocr.OnDevicePhotoText
+import com.hamza.studyhub.ocr.PhotoTextReview
 import com.hamza.studyhub.sources.SchoolFeedStore
 import com.hamza.studyhub.teams.TeamsAuthStore
 import com.hamza.studyhub.teams.TeamsSyncWorker
@@ -64,23 +64,66 @@ class MainActivity : AppCompatActivity() {
     private lateinit var homeworkScroll: ScrollView
     private var feedMode = FeedMode.TO_DO
     private val expandedDetails = mutableSetOf<String>()
+    private var pendingTodayFocus: String? = null
 
+    companion object {
+        const val EXTRA_TODAY_FOCUS = "com.hamza.studyhub.TODAY_FOCUS"
+        private const val STATE_TODAY_FOCUS = "todayFocus"
+        private const val STATE_SHARE_FINISHED = "shareFinished"
+        private const val STATE_EXPANDED = "expandedAssignments"
+        fun todayFocusKey(item: JSONObject): String {
+            for (field in listOf("externalId", "id", "notificationKey")) {
+                item.optString(field).takeIf { it.isNotBlank() }?.let { return "$field:$it" }
+            }
+            val time = item.optLong("timestamp", 0L)
+            return item.optString("contentFingerprint").takeIf { it.isNotBlank() }
+                ?.let { "content:$time:$it" } ?: "time:$time"
+        }
+    }
+
+    // Retain only whether the user finished reviewing the share, never its content.
+    private var shareFinished = false
+    private var shareRevision = 0
+    private var importReviewDialog: AlertDialog? = null
     private val bookStore by lazy { BookLibraryStore(this) }
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         feedMode = if (intent.getBooleanExtra("open_attention", false)) FeedMode.ATTENTION else FeedMode.TO_DO
+        pendingTodayFocus = if (savedInstanceState == null)
+            intent.takeUnless { it.action == Intent.ACTION_SEND }?.getStringExtra(EXTRA_TODAY_FOCUS)
+            else savedInstanceState.getString(STATE_TODAY_FOCUS)
+        savedInstanceState?.getStringArrayList(STATE_EXPANDED)?.let(expandedDetails::addAll)
         setContentView(buildScreen())
         requestNotificationPermissionIfNeeded()
-        processIncomingShare(intent)
+        shareFinished = savedInstanceState?.getBoolean(STATE_SHARE_FINISHED) == true
+        if (!shareFinished) processIncomingShare(intent)
         scheduleSources()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingTodayFocus?.let { outState.putString(STATE_TODAY_FOCUS, it) }
+        outState.putStringArrayList(STATE_EXPANDED, ArrayList(expandedDetails.take(50)))
+        outState.putBoolean(STATE_SHARE_FINISHED, shareFinished)
+    }
+
+    override fun onDestroy() {
+        importReviewDialog?.dismiss()
+        importReviewDialog = null
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        shareFinished = false
         if (intent.getBooleanExtra("open_attention", false)) feedMode = FeedMode.ATTENTION
+        if (intent.action != Intent.ACTION_SEND) {
+            pendingTodayFocus = intent.getStringExtra(EXTRA_TODAY_FOCUS)
+            if (pendingTodayFocus != null) feedMode = FeedMode.TO_DO
+        }
         processIncomingShare(intent)
     }
 
@@ -250,6 +293,11 @@ class MainActivity : AppCompatActivity() {
             FeedMode.ALL -> HomeworkScreenPolicy.Filter.ALL
         }
         val visible = HomeworkScreenPolicy.visible(allItems, filter)
+        val focused = pendingTodayFocus?.let { key ->
+            visible.firstOrNull { todayFocusKey(it) == key }
+        }
+        pendingTodayFocus = null
+        if (focused != null) expandedDetails += detailKey(focused)
         feedContainer.removeAllViews()
         if (visible.isEmpty()) {
             val message = when (feedMode) {
@@ -260,9 +308,20 @@ class MainActivity : AppCompatActivity() {
             feedContainer.addView(HamzaUi.statusBox(this, message, Color.WHITE, HamzaUi.muted))
             return
         }
-        visible.forEach { feedContainer.addView(buildNotificationCard(it)) }
-        if (previousScroll > 0) homeworkScroll.post { homeworkScroll.scrollTo(0, previousScroll) }
+        var focusedCard: View? = null
+        visible.forEach { item ->
+            val card = buildNotificationCard(item)
+            feedContainer.addView(card)
+            if (item === focused) focusedCard = card
+        }
+        focusedCard?.let { card ->
+            homeworkScroll.post { homeworkScroll.scrollTo(0, card.top) }
+        } ?: run {
+            if (previousScroll > 0) homeworkScroll.post { homeworkScroll.scrollTo(0, previousScroll) }
+        }
     }
+
+    private fun detailKey(item: JSONObject) = todayFocusKey(item)
 
     private fun buildNotificationCard(item: JSONObject): View {
         val source = item.optString("source", "School")
@@ -274,9 +333,7 @@ class MainActivity : AppCompatActivity() {
             .ifBlank { originalTitle.substringAfter("•", "").trim() }
         val heading = if (homework) subject.ifBlank { originalTitle } else originalTitle
         val idTag = item.optLong("timestamp")
-        val detailKey = item.optString("externalId")
-            .ifBlank { item.optString("contentFingerprint") }
-            .ifBlank { idTag.toString() }
+        val detailKey = detailKey(item)
         val due = HomeworkScreenPolicy.dueStatus(item.optInt("dueDate", 0))
         val referenceDetected = item.optBoolean("bookReferenceDetected", false)
         val resolved = if (referenceDetected) BookAssignmentResolver(bookStore)
@@ -528,38 +585,74 @@ class MainActivity : AppCompatActivity() {
         }
 
     private fun processIncomingShare(incoming: Intent?) {
+        shareRevision++
+        importReviewDialog?.dismiss()
+        importReviewDialog = null
         if (incoming?.action != Intent.ACTION_SEND) return
         when {
             incoming.type?.startsWith("text/") == true ->
                 incoming.getStringExtra(Intent.EXTRA_TEXT).orEmpty().takeIf { it.isNotBlank() }?.let {
-                    saveImportedContent("واجب تمت مشاركته", it, "Shared text")
-                    showShareStatus("تمت إضافة النص المشارك.")
-                    refreshFeed()
+                    confirmSharedContent("واجب تمت مشاركته", it, "Shared text")
                 }
             incoming.type?.startsWith("image/") == true -> {
                 @Suppress("DEPRECATION")
                 val uri = incoming.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
-                if (uri != null) readHomeworkScreenshot(uri)
+                if (uri?.scheme == "content") readHomeworkScreenshot(uri)
+                else showShareStatus(getString(R.string.image_open_failed))
             }
         }
     }
 
     private fun readHomeworkScreenshot(uri: Uri) {
-        showShareStatus("جاري قراءة صورة الواجب…")
-        runCatching { InputImage.fromFilePath(this, uri) }.onSuccess { image ->
-            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(image)
-                .addOnSuccessListener { result ->
-                    val text = result.text.trim()
-                    if (text.isBlank()) {
-                        showShareStatus("لم أستطع استخراج نص واضح من الصورة.")
-                    } else {
-                        saveImportedContent("واجب مقروء من صورة", text, "Screenshot OCR")
-                        showShareStatus("تمت قراءة الصورة وإضافتها.")
+        val revision = shareRevision
+        fun cancelReview() {
+            if (revision == shareRevision) {
+                shareFinished = true
+                showShareStatus(getString(R.string.photo_ocr_not_saved))
+            }
+        }
+        importReviewDialog = PhotoTextReview.chooseLanguage(this, onSelected = { language ->
+            showShareStatus(getString(R.string.photo_ocr_reading))
+            OnDevicePhotoText.recognize(this, uri, language) { suggestion ->
+                if (revision != shareRevision || isFinishing || isDestroyed) return@recognize
+                showShareStatus(getString(R.string.shared_review_before_save))
+                importReviewDialog = PhotoTextReview.edit(this, suggestion, onSave = { confirmed ->
+                    val saved = runCatching {
+                        saveImportedContent(
+                            getString(R.string.photo_ocr_homework_title), confirmed, "Screenshot OCR"
+                        )
+                    }.isSuccess
+                    if (saved) {
+                        shareFinished = true
+                        showShareStatus(getString(R.string.shared_review_saved))
                         refreshFeed()
                     }
-                }
-                .addOnFailureListener { showShareStatus("حدث خطأ أثناء قراءة الصورة.") }
-        }.onFailure { showShareStatus("تعذر فتح الصورة.") }
+                    saved
+                }, onDismissed = ::cancelReview)
+            }
+        }, onDismissed = ::cancelReview)
+    }
+
+    private fun confirmSharedContent(title: String, text: String, method: String) {
+        if (isFinishing || isDestroyed) return
+        val snippet = text.trim()
+        if (snippet.length > 2000) {
+            showShareStatus(getString(R.string.whatsapp_import_too_long))
+            return
+        }
+        showShareStatus(getString(R.string.shared_review_before_save))
+        importReviewDialog = PhotoTextReview.edit(this, snippet, onSave = { confirmed ->
+            val saved = runCatching { saveImportedContent(title, confirmed, method) }.isSuccess
+            if (saved) {
+                shareFinished = true
+                showShareStatus(getString(R.string.shared_review_saved))
+                refreshFeed()
+            }
+            saved
+        }, onDismissed = {
+            shareFinished = true
+            showShareStatus(getString(R.string.shared_review_not_saved))
+        }, sharedText = true)
     }
 
     private fun saveImportedContent(title: String, text: String, importMethod: String) {

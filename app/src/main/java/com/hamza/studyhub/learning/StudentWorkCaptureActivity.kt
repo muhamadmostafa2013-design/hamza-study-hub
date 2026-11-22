@@ -8,26 +8,37 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.hamza.studyhub.R
+import com.hamza.studyhub.ocr.OnDevicePhotoText
+import com.hamza.studyhub.ocr.PhotoTextReview
 import com.hamza.studyhub.ui.HamzaUi
 import java.io.File
 import java.util.UUID
 
 class StudentWorkCaptureActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
-    private var pendingCameraUri: Uri? = null
-    private var pendingCameraFile: File? = null
+    private var pendingCameraName: String? = null
+    private var visibleAttemptId: String? = null
+    private var recognitionDialog: AlertDialog? = null
     private val store by lazy { LearningEvidenceStore(this) }
 
     private val cameraLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success) {
-            val uri = pendingCameraUri; val file = pendingCameraFile
-            if (uri != null && file != null) analyzeAndStore(uri, Uri.fromFile(file).toString())
-        } else statusText.text = "لم يتم التقاط صورة."
+        val file = PendingCameraCapture.resolve(filesDir, pendingCameraName)
+        pendingCameraName = null
+        when {
+            !success -> {
+                // Only discard this attempt's empty placeholder; a camera may have written
+                // a usable photo even if it failed to report success.
+                if (file?.isFile == true && file.length() == 0L) file.delete()
+                statusText.text = "لم يتم التقاط صورة."
+            }
+            file?.isFile == true && file.length() > 0L ->
+                analyzeAndStore(Uri.fromFile(file), Uri.fromFile(file).toString())
+            else -> statusText.text = "تعذر استرجاع الصورة. حاول التقاطها مرة أخرى."
+        }
     }
 
     private val imagePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -40,7 +51,20 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingCameraName = savedInstanceState?.getString(STATE_PENDING_CAMERA)
+            ?.takeIf { PendingCameraCapture.resolve(filesDir, it) != null }
         setContentView(buildScreen())
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingCameraName?.let { outState.putString(STATE_PENDING_CAMERA, it) }
+    }
+
+    override fun onDestroy() {
+        recognitionDialog?.dismiss()
+        recognitionDialog = null
+        super.onDestroy()
     }
 
     private fun buildScreen(): View {
@@ -78,28 +102,63 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
         statusText.gravity = Gravity.END
         content.addView(statusText, HamzaUi.marginTop(this, 14))
 
-        content.addView(HamzaUi.subtitle(this,
-            "بعد الحفظ يمكن للنظام لاحقًا مقارنة المحاولات واكتشاف نمط الخطأ المتكرر والتحسن عبر الوقت."), HamzaUi.marginTop(this, 14))
-        return ScrollView(this).apply { isFillViewport = true; addView(content) }
+        content.addView(HamzaUi.subtitle(this, getString(R.string.photo_ocr_attempt_note)), HamzaUi.marginTop(this, 14))
+        return ScrollView(this).apply {
+            isFillViewport = true
+            addView(content)
+            HamzaUi.insetScrollable(this@StudentWorkCaptureActivity, this, content, 18, 24, 28)
+        }
     }
 
     private fun startCameraCapture() {
-        val dir = File(filesDir, "student_work").apply { mkdirs() }
-        val file = File(dir, "attempt-${System.currentTimeMillis()}.jpg")
-        val uri = FileProvider.getUriForFile(this, "${packageName}.files", file)
-        pendingCameraFile = file; pendingCameraUri = uri; cameraLauncher.launch(uri)
+        if (pendingCameraName != null) return
+        val name = PendingCameraCapture.newName()
+        val file = PendingCameraCapture.resolve(filesDir, name)
+        if (file == null) {
+            statusText.text = "تعذر فتح الكاميرا. يمكنك اختيار صورة موجودة."
+            return
+        }
+        pendingCameraName = name
+        runCatching {
+            file.parentFile?.mkdirs()
+            val uri = FileProvider.getUriForFile(this, "${packageName}.files", file)
+            cameraLauncher.launch(uri)
+        }.onFailure {
+            pendingCameraName = null
+            statusText.text = "تعذر فتح الكاميرا. يمكنك اختيار صورة موجودة."
+        }
     }
 
     private fun analyzeAndStore(inputUri: Uri, stableImageUri: String) {
-        statusText.text = "جاري حفظ المحاولة وقراءة الكتابة…"
-        runCatching { InputImage.fromFilePath(this, inputUri) }
-            .onSuccess { image -> TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(image)
-                .addOnSuccessListener { saveAttempt(stableImageUri, it.text.trim().takeIf(String::isNotBlank)) }
-                .addOnFailureListener { saveAttempt(stableImageUri, null) } }
-            .onFailure { saveAttempt(stableImageUri, null) }
+        val attempt = runCatching { savePhotoAttempt(stableImageUri) }.getOrElse {
+            statusText.text = "تعذر تسجيل المحاولة. جرّب مرة أخرى."
+            return
+        }
+        visibleAttemptId = attempt.id
+        fun showSavedPhoto() {
+            if (!isDestroyed && !isFinishing && visibleAttemptId == attempt.id) {
+                statusText.text = getString(R.string.photo_ocr_attempt_saved, attempt.attemptNumber)
+            }
+        }
+        showSavedPhoto()
+        recognitionDialog = PhotoTextReview.chooseLanguage(this, onSelected = { language ->
+            statusText.text = getString(R.string.photo_ocr_reading)
+            OnDevicePhotoText.recognize(this, inputUri, language) { suggestion ->
+                if (isDestroyed || isFinishing || visibleAttemptId != attempt.id) return@recognize
+                showSavedPhoto()
+                recognitionDialog = PhotoTextReview.edit(this, suggestion, onSave = { confirmed ->
+                    val saved = runCatching { store.updateExtractedText(attempt.id, confirmed) }.getOrDefault(false)
+                    statusText.text = getString(
+                        if (saved) R.string.photo_ocr_attempt_saved_with_text else R.string.photo_ocr_attempt_text_error,
+                        attempt.attemptNumber
+                    )
+                    saved
+                })
+            }
+        })
     }
 
-    private fun saveAttempt(imageUri: String, extractedText: String?) {
+    private fun savePhotoAttempt(imageUri: String): StudentAttempt {
         val fingerprint = intent.getStringExtra(EXTRA_ASSIGNMENT_FINGERPRINT)?.takeIf { it.isNotBlank() }
             ?: "manual-${System.currentTimeMillis()}"
         val attempt = StudentAttempt(
@@ -109,13 +168,9 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
             bookId = intent.getStringExtra(EXTRA_BOOK_ID)?.takeIf { it.isNotBlank() },
             page = intent.getIntExtra(EXTRA_PAGE, 0).takeIf { it > 0 },
             exercise = intent.getStringExtra(EXTRA_EXERCISE)?.takeIf { it.isNotBlank() },
-            capturedAt = System.currentTimeMillis(), imageUri = imageUri, extractedText = extractedText,
-            attemptNumber = store.nextAttemptNumber(fingerprint)
+            capturedAt = System.currentTimeMillis(), imageUri = imageUri
         )
-        store.appendAttempt(attempt)
-        statusText.text = if (!extractedText.isNullOrBlank())
-            "تم حفظ المحاولة رقم ${attempt.attemptNumber} وقراءة نص مبدئي منها للتحليل لاحقًا."
-        else "تم حفظ المحاولة رقم ${attempt.attemptNumber}. الصورة محفوظة حتى لو لم تُقرأ الكتابة بوضوح."
+        return store.saveNewAttempt(attempt)
     }
 
     private fun copyIntoPrivateStorage(uri: Uri): File? = runCatching {
@@ -126,6 +181,7 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
     }.getOrNull()
 
     companion object {
+        private const val STATE_PENDING_CAMERA = "pending_camera_name"
         const val EXTRA_ASSIGNMENT_FINGERPRINT = "assignment_fingerprint"
         const val EXTRA_SUBJECT = "subject"
         const val EXTRA_BOOK_ID = "book_id"

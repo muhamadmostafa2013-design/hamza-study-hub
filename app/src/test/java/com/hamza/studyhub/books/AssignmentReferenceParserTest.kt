@@ -21,6 +21,20 @@ class AssignmentReferenceParserTest {
         assertEquals(listOf("3"), ref.exercises)
     }
 
+    @Test fun normalizesArabicIndicDigitsWithoutChangingTheSource() {
+        val original = "الواجب صفحة ١٢ تمرين ٣-٥"
+        val ref = AssignmentReferenceParser.parse(original)!!
+        assertEquals(12, ref.page)
+        assertEquals(listOf("3-5"), ref.exercises)
+        assertEquals(original, ref.rawReference)
+    }
+
+    @Test fun normalizesEasternArabicAndMixedDigits() {
+        val ref = AssignmentReferenceParser.parse("Deutsch", "Seite ۳7 Aufgabe ۲a–٤b")!!
+        assertEquals(37, ref.page)
+        assertEquals(listOf("2a–4b"), ref.exercises)
+    }
+
     @Test fun resolvesMatchingSubjectBook() {
         val catalog = InMemoryBookCatalog(listOf(
             BookAsset("1", "Deutschprofis", "Deutsch", aliases = setOf("Arbeitsbuch")),

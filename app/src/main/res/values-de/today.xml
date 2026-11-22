@@ -1,0 +1,31 @@
+<resources>
+    <string name="today_title">Heute</string>
+    <string name="today_intro">Deine Hausaufgaben und dein nächster Schritt auf einen Blick.</string>
+    <string name="today_next">Nächste Hausaufgabe</string>
+    <string name="today_no_assignment">Keine nächste Hausaufgabe gespeichert</string>
+    <string name="today_no_assignment_hint">Öffne die Aufgabenliste oder füge eine Aufgabe hinzu.</string>
+    <string name="today_assignment_fallback">Hausaufgabe</string>
+    <string name="today_due">Abgabe: %1$s</string>
+    <string name="today_due_unknown">Kein Abgabetermin angegeben</string>
+    <string name="today_local">Auf diesem Gerät gespeichert; neuere Meldungen sind möglich.</string>
+    <string name="today_read_error">Gespeicherte Aufgaben konnten nicht geladen werden. Öffne die Aufgabenliste.</string>
+    <string name="today_start">Hausaufgabe beginnen</string>
+    <string name="today_resume">Hausaufgabe fortsetzen</string>
+    <string name="today_links">Lernen</string>
+    <string name="today_homework">Hausaufgaben</string>
+    <string name="today_books">Bücher</string>
+    <string name="today_bag">Schultasche</string>
+    <string name="today_plan">Lernplan</string>
+    <string name="today_parent">Für Eltern</string>
+    <string name="today_sources">Schulquellen</string>
+    <string name="today_whatsapp">Aufgabe aus WhatsApp hinzufügen</string>
+    <string name="today_update">App-Update prüfen</string>
+    <string name="today_other_language">العربية</string>
+    <string name="today_unavailable">Aufgaben nicht verfügbar</string>
+    <string name="today_unverified">%1$s • Bitte bei der Schule bestätigen</string>
+    <string name="today_loading">Aufgaben werden geladen…</string>
+    <string name="shared_review_title">Geteilten Text prüfen</string>
+    <string name="shared_review_before_save">Prüfe den Text und entferne fremde Namen und Telefonnummern vor dem Speichern.</string>
+    <string name="shared_review_not_saved">Der geteilte Text wurde nicht gespeichert.</string>
+    <string name="shared_review_saved">Der geteilte Text wurde gespeichert.</string>
+</resources>

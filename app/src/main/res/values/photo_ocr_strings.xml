@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="photo_ocr_language">لغة النص في الصورة</string>
+    <string name="photo_ocr_arabic">العربية</string>
+    <string name="photo_ocr_latin">الألمانية أو نص لاتيني</string>
+    <string name="photo_ocr_reading">جاري قراءة الصورة على الجهاز…</string>
+    <string name="photo_ocr_review">راجع النص قبل الحفظ</string>
+    <string name="photo_ocr_text_hint">اكتب النص أو صحّحه هنا</string>
+    <string name="photo_ocr_check_text">النص مقترح تلقائيًا. راجع الأرقام، والصفحات، والتمارين قبل الحفظ.</string>
+    <string name="photo_ocr_empty_text">لم يُعثر على نص واضح. يمكنك كتابته يدويًا أو الإلغاء.</string>
+    <string name="photo_ocr_long_text">النص أطول من ٢٠٠٠ حرف. اكتب الجزء المهم يدويًا أو ألغِ العملية.</string>
+    <string name="photo_ocr_save">حفظ النص بعد المراجعة</string>
+    <string name="photo_ocr_not_saved">لم يتم حفظ النص من الصورة.</string>
+    <string name="photo_ocr_homework_title">واجب من صورة</string>
+    <string name="photo_ocr_attempt_note">الصورة تُحفظ أولًا. قراءة النص اختيارية وتتم على الجهاز. النص المطبوع أوضح من الكتابة اليدوية.</string>
+    <string name="photo_ocr_attempt_saved">تم حفظ صورة المحاولة رقم %1$d.</string>
+    <string name="photo_ocr_attempt_saved_with_text">تم حفظ المحاولة رقم %1$d والنص بعد مراجعته.</string>
+    <string name="photo_ocr_attempt_text_error">الصورة محفوظة للمحاولة رقم %1$d، ولكن تعذر حفظ النص.</string>
+</resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whatsapp_import_title">Hausaufgabe aus WhatsApp hinzufügen</string>
+    <string name="whatsapp_import_help">Füge nur die ausgewählte Aufgabenstellung ein oder tippe sie ab. Entferne Namen anderer Kinder, Telefonnummern und Nachrichten ohne Bezug zur Aufgabe. Die App verbindet sich nicht mit WhatsApp und speichert keinen Gruppenverlauf.</string>
+    <string name="whatsapp_import_field">Aufgabenstellung</string>
+    <string name="whatsapp_import_save">Hausaufgabe speichern</string>
+    <string name="whatsapp_import_confirm">Aufgabenstellung auf diesem Gerät speichern? Aus WhatsApp übernommene Aufgaben sind unbestätigt. Prüfe den Abgabetermin bei der Schule.</string>
+    <string name="whatsapp_import_empty">Gib vor dem Speichern die Aufgabenstellung ein.</string>
+    <string name="whatsapp_import_too_long">Verwende höchstens 2.000 Zeichen und kopiere nur die benötigte Aufgabe.</string>
+    <string name="whatsapp_import_error">Speichern fehlgeschlagen. Der Text bleibt erhalten. Versuche es erneut.</string>
+    <string name="whatsapp_import_saved">Hausaufgabe als unbestätigt auf diesem Gerät gespeichert.</string>
+    <string name="whatsapp_import_open">Hausaufgaben öffnen</string>
+    <string name="whatsapp_import_done">Fertig</string>
+</resources>

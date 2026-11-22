@@ -11,6 +11,16 @@
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 
+    <style name="Theme.HamzaStudyHub.Today" parent="Theme.Material3Expressive.Light.NoActionBar">
+        <item name="colorPrimary">#173F6B</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSurface">#F6F8FC</item>
+        <item name="colorOnSurface">#161C26</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">#F6F8FC</item>
+    </style>
+
     <style name="Theme.HamzaStudyHub.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#18365B</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>

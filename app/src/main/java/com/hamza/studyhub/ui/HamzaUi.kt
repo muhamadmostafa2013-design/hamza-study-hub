@@ -1,5 +1,6 @@
 package com.hamza.studyhub.ui
 
+import android.app.Activity
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -9,6 +10,9 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 
@@ -24,6 +28,20 @@ object HamzaUi {
     val purple = Color.rgb(92, 94, 191)
     val danger = Color.rgb(178, 54, 58)
     val border = Color.rgb(226, 231, 237)
+
+    fun insetScrollable(activity: Activity, root: View, content: View, horizontalDp: Int, topDp: Int, bottomDp: Int, avoidIme: Boolean = false) {
+        WindowCompat.setDecorFitsSystemWindows(activity.window, false)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val types = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or
+                (if (avoidIme) WindowInsetsCompat.Type.ime() else 0)
+            val safe = insets.getInsets(types)
+            content.setPadding(
+                dp(activity, horizontalDp) + safe.left, dp(activity, topDp) + safe.top,
+                dp(activity, horizontalDp) + safe.right, dp(activity, bottomDp) + safe.bottom
+            )
+            insets
+        }
+    }
 
     fun dp(context: Context, value: Int): Int = (value * context.resources.displayMetrics.density).toInt()
 
