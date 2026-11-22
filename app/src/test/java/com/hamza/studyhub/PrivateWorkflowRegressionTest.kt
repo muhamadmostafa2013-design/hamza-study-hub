@@ -9,6 +9,7 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -64,11 +65,19 @@ class PrivateWorkflowRegressionTest {
         assertTrue(ShadowDialog.getLatestDialog() === dismissedReview)
         cancelled.pause().stop().destroy()
 
-        val confirmed = Robolectric.buildActivity(MainActivity::class.java, shareIntent(snippet)).setup()
-        reviewDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        val unrelated = "SYNTHETIC CONTACT 000"
+        val confirmed = Robolectric.buildActivity(
+            MainActivity::class.java, shareIntent("$snippet\n$unrelated")
+        ).setup()
+        val editableReview = reviewDialog()
+        val editor = views(checkNotNull(editableReview.window).decorView).filterIsInstance<EditText>().single()
+        assertTrue(editor.text.toString().contains(unrelated))
+        editor.setText(snippet)
+        editableReview.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
         idleMain()
         val saved = SchoolFeedStore.read(context).single()
         assertEquals(snippet, saved.getString("text"))
+        assertFalse(saved.toString().contains(unrelated))
         assertEquals("Shared", saved.getString("source"))
         assertEquals("Shared text", saved.getString("importMethod"))
         val savedReview = reviewDialog()

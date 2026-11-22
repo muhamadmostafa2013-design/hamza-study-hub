@@ -84,7 +84,7 @@ class MainActivity : AppCompatActivity() {
     // Retain only whether the user finished reviewing the share, never its content.
     private var shareFinished = false
     private var shareRevision = 0
-    private var photoDialog: AlertDialog? = null
+    private var importReviewDialog: AlertDialog? = null
     private val bookStore by lazy { BookLibraryStore(this) }
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -107,6 +107,12 @@ class MainActivity : AppCompatActivity() {
         pendingTodayFocus?.let { outState.putString(STATE_TODAY_FOCUS, it) }
         outState.putStringArrayList(STATE_EXPANDED, ArrayList(expandedDetails.take(50)))
         outState.putBoolean(STATE_SHARE_FINISHED, shareFinished)
+    }
+
+    override fun onDestroy() {
+        importReviewDialog?.dismiss()
+        importReviewDialog = null
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -580,8 +586,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun processIncomingShare(incoming: Intent?) {
         shareRevision++
-        photoDialog?.dismiss()
-        photoDialog = null
+        importReviewDialog?.dismiss()
+        importReviewDialog = null
         if (incoming?.action != Intent.ACTION_SEND) return
         when {
             incoming.type?.startsWith("text/") == true ->
@@ -605,12 +611,12 @@ class MainActivity : AppCompatActivity() {
                 showShareStatus(getString(R.string.photo_ocr_not_saved))
             }
         }
-        photoDialog = PhotoTextReview.chooseLanguage(this, onSelected = { language ->
+        importReviewDialog = PhotoTextReview.chooseLanguage(this, onSelected = { language ->
             showShareStatus(getString(R.string.photo_ocr_reading))
             OnDevicePhotoText.recognize(this, uri, language) { suggestion ->
                 if (revision != shareRevision || isFinishing || isDestroyed) return@recognize
                 showShareStatus(getString(R.string.shared_review_before_save))
-                photoDialog = PhotoTextReview.edit(this, suggestion, onSave = { confirmed ->
+                importReviewDialog = PhotoTextReview.edit(this, suggestion, onSave = { confirmed ->
                     val saved = runCatching {
                         saveImportedContent(
                             getString(R.string.photo_ocr_homework_title), confirmed, "Screenshot OCR"
@@ -620,7 +626,8 @@ class MainActivity : AppCompatActivity() {
                         shareFinished = true
                         showShareStatus(getString(R.string.shared_review_saved))
                         refreshFeed()
-                    } else showShareStatus(getString(R.string.whatsapp_import_error))
+                    }
+                    saved
                 }, onDismissed = ::cancelReview)
             }
         }, onDismissed = ::cancelReview)
@@ -634,18 +641,18 @@ class MainActivity : AppCompatActivity() {
             return
         }
         showShareStatus(getString(R.string.shared_review_before_save))
-        AlertDialog.Builder(this)
-            .setTitle(R.string.shared_review_title)
-            .setMessage(getString(R.string.shared_review_preview, snippet))
-            .setNegativeButton(android.R.string.cancel) { _, _ -> shareFinished = true }
-            .setOnCancelListener { shareFinished = true }
-            .setPositiveButton(R.string.whatsapp_import_save) { _, _ ->
-                if (runCatching { saveImportedContent(title, snippet, method) }.isSuccess) {
-                    shareFinished = true
-                    showShareStatus(getString(R.string.shared_review_saved))
-                    refreshFeed()
-                } else showShareStatus(getString(R.string.whatsapp_import_error))
-            }.show()
+        importReviewDialog = PhotoTextReview.edit(this, snippet, onSave = { confirmed ->
+            val saved = runCatching { saveImportedContent(title, confirmed, method) }.isSuccess
+            if (saved) {
+                shareFinished = true
+                showShareStatus(getString(R.string.shared_review_saved))
+                refreshFeed()
+            }
+            saved
+        }, onDismissed = {
+            shareFinished = true
+            showShareStatus(getString(R.string.shared_review_not_saved))
+        }, sharedText = true)
     }
 
     private fun saveImportedContent(title: String, text: String, importMethod: String) {

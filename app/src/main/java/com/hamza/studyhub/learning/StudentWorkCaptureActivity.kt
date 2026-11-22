@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import com.hamza.studyhub.R
@@ -21,6 +22,7 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private var pendingCameraName: String? = null
     private var visibleAttemptId: String? = null
+    private var recognitionDialog: AlertDialog? = null
     private val store by lazy { LearningEvidenceStore(this) }
 
     private val cameraLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
@@ -57,6 +59,12 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         pendingCameraName?.let { outState.putString(STATE_PENDING_CAMERA, it) }
+    }
+
+    override fun onDestroy() {
+        recognitionDialog?.dismiss()
+        recognitionDialog = null
+        super.onDestroy()
     }
 
     private fun buildScreen(): View {
@@ -133,17 +141,18 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
             }
         }
         showSavedPhoto()
-        PhotoTextReview.chooseLanguage(this, onSelected = { language ->
+        recognitionDialog = PhotoTextReview.chooseLanguage(this, onSelected = { language ->
             statusText.text = getString(R.string.photo_ocr_reading)
             OnDevicePhotoText.recognize(this, inputUri, language) { suggestion ->
                 if (isDestroyed || isFinishing || visibleAttemptId != attempt.id) return@recognize
                 showSavedPhoto()
-                PhotoTextReview.edit(this, suggestion, onSave = { confirmed ->
+                recognitionDialog = PhotoTextReview.edit(this, suggestion, onSave = { confirmed ->
                     val saved = runCatching { store.updateExtractedText(attempt.id, confirmed) }.getOrDefault(false)
                     statusText.text = getString(
                         if (saved) R.string.photo_ocr_attempt_saved_with_text else R.string.photo_ocr_attempt_text_error,
                         attempt.attemptNumber
                     )
+                    saved
                 })
             }
         })
