@@ -19,15 +19,23 @@ import java.util.UUID
 
 class StudentWorkCaptureActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
-    private var pendingCameraUri: Uri? = null
-    private var pendingCameraFile: File? = null
+    private var pendingCameraName: String? = null
     private val store by lazy { LearningEvidenceStore(this) }
 
     private val cameraLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success) {
-            val uri = pendingCameraUri; val file = pendingCameraFile
-            if (uri != null && file != null) analyzeAndStore(uri, Uri.fromFile(file).toString())
-        } else statusText.text = "لم يتم التقاط صورة."
+        val file = PendingCameraCapture.resolve(filesDir, pendingCameraName)
+        pendingCameraName = null
+        when {
+            !success -> {
+                // Only discard this attempt's empty placeholder; a camera may have written
+                // a usable photo even if it failed to report success.
+                if (file?.isFile == true && file.length() == 0L) file.delete()
+                statusText.text = "لم يتم التقاط صورة."
+            }
+            file?.isFile == true && file.length() > 0L ->
+                analyzeAndStore(Uri.fromFile(file), Uri.fromFile(file).toString())
+            else -> statusText.text = "تعذر استرجاع الصورة. حاول التقاطها مرة أخرى."
+        }
     }
 
     private val imagePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -40,7 +48,14 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingCameraName = savedInstanceState?.getString(STATE_PENDING_CAMERA)
+            ?.takeIf { PendingCameraCapture.resolve(filesDir, it) != null }
         setContentView(buildScreen())
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingCameraName?.let { outState.putString(STATE_PENDING_CAMERA, it) }
     }
 
     private fun buildScreen(): View {
@@ -79,15 +94,27 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
         content.addView(statusText, HamzaUi.marginTop(this, 14))
 
         content.addView(HamzaUi.subtitle(this,
-            "بعد الحفظ يمكن للنظام لاحقًا مقارنة المحاولات واكتشاف نمط الخطأ المتكرر والتحسن عبر الوقت."), HamzaUi.marginTop(this, 14))
+            "تُحفظ الصورة حتى إن لم يمكن قراءة النص. القراءة التلقائية لا تدعم الكتابة العربية."), HamzaUi.marginTop(this, 14))
         return ScrollView(this).apply { isFillViewport = true; addView(content) }
     }
 
     private fun startCameraCapture() {
-        val dir = File(filesDir, "student_work").apply { mkdirs() }
-        val file = File(dir, "attempt-${System.currentTimeMillis()}.jpg")
-        val uri = FileProvider.getUriForFile(this, "${packageName}.files", file)
-        pendingCameraFile = file; pendingCameraUri = uri; cameraLauncher.launch(uri)
+        if (pendingCameraName != null) return
+        val name = PendingCameraCapture.newName()
+        val file = PendingCameraCapture.resolve(filesDir, name)
+        if (file == null) {
+            statusText.text = "تعذر فتح الكاميرا. يمكنك اختيار صورة موجودة."
+            return
+        }
+        pendingCameraName = name
+        runCatching {
+            file.parentFile?.mkdirs()
+            val uri = FileProvider.getUriForFile(this, "${packageName}.files", file)
+            cameraLauncher.launch(uri)
+        }.onFailure {
+            pendingCameraName = null
+            statusText.text = "تعذر فتح الكاميرا. يمكنك اختيار صورة موجودة."
+        }
     }
 
     private fun analyzeAndStore(inputUri: Uri, stableImageUri: String) {
@@ -126,6 +153,7 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
     }.getOrNull()
 
     companion object {
+        private const val STATE_PENDING_CAMERA = "pending_camera_name"
         const val EXTRA_ASSIGNMENT_FINGERPRINT = "assignment_fingerprint"
         const val EXTRA_SUBJECT = "subject"
         const val EXTRA_BOOK_ID = "book_id"

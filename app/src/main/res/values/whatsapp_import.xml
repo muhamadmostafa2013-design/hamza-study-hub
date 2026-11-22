@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whatsapp_import_title">Add WhatsApp homework</string>
+    <string name="whatsapp_import_help">Paste or type only the homework instructions you selected. Remove other students’ names, phone numbers and unrelated messages. This does not connect to WhatsApp or save the group history.</string>
+    <string name="whatsapp_import_field">Homework instructions</string>
+    <string name="whatsapp_import_save">Save homework</string>
+    <string name="whatsapp_import_confirm">Save these instructions on this device? Homework imported from WhatsApp is unverified. Confirm any due date with the school.</string>
+    <string name="whatsapp_import_empty">Add the homework instructions before saving.</string>
+    <string name="whatsapp_import_too_long">Use at most 2,000 characters. Copy only the homework you need.</string>
+    <string name="whatsapp_import_error">Could not save. The text is still here so you can try again.</string>
+    <string name="whatsapp_import_saved">Homework saved on this device as unverified.</string>
+    <string name="whatsapp_import_open">Open homework</string>
+    <string name="whatsapp_import_done">Done</string>
+</resources>

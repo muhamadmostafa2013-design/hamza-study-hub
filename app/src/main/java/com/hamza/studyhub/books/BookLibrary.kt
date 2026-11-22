@@ -50,10 +50,17 @@ object AssignmentReferenceParser {
         val raw = textParts.filter { it.isNotBlank() }.joinToString(" ")
             .replace(Regex("\\s+"), " ").trim()
         if (raw.isBlank()) return null
+        val normalized = raw.map { character ->
+            when (character) {
+                in '٠'..'٩' -> '0' + (character - '٠')
+                in '۰'..'۹' -> '0' + (character - '۰')
+                else -> character
+            }
+        }.joinToString("")
         val page = pagePatterns.firstNotNullOfOrNull { pattern ->
-            pattern.find(raw)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            pattern.find(normalized)?.groupValues?.getOrNull(1)?.toIntOrNull()
         }
-        val exercises = exercisePattern.findAll(raw)
+        val exercises = exercisePattern.findAll(normalized)
             .mapNotNull { it.groupValues.getOrNull(1)?.replace(" ", "") }
             .filter { it.isNotBlank() }.distinct().toList()
         if (page == null && exercises.isEmpty()) return null

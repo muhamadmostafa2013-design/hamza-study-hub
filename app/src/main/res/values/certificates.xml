@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="certificates_title">Certificates</string>
+    <string name="certificates_private">PDF copies stay on this device and are not backed up. Keep your originals in a private folder.</string>
+    <string name="certificates_add">Add PDF</string>
+    <string name="certificates_empty">No certificates added yet.</string>
+    <string name="certificates_record">Certificate %1$d · %2$s</string>
+    <string name="certificates_open">Preview</string>
+    <string name="certificates_open_record">Preview %1$s</string>
+    <string name="certificates_remove">Remove local copy</string>
+    <string name="certificates_remove_record">Remove the local copy of %1$s</string>
+    <string name="certificates_remove_confirm">This removes the copy from this app. The original file is not changed.</string>
+    <string name="certificates_removed">Local copy removed.</string>
+    <string name="certificates_error">The PDF could not be processed. Try a readable, unlocked PDF with up to 500 pages.</string>
+    <string name="certificates_too_large">Choose a PDF no larger than 20 MB.</string>
+    <string name="certificates_picker_error">The file picker could not be opened.</string>
+    <string name="certificates_importing">Saving a private copy…</string>
+    <string name="certificates_imported">Certificate saved on this device.</string>
+    <string name="certificates_loading">Loading preview…</string>
+    <string name="certificates_page_image">PDF page preview</string>
+    <string name="certificates_previous">Previous</string>
+    <string name="certificates_next">Next</string>
+    <string name="certificates_page">Page %1$d of %2$d</string>
+</resources>

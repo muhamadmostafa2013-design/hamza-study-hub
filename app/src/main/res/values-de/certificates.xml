@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="certificates_title">Zertifikate</string>
+    <string name="certificates_private">PDF-Kopien bleiben auf diesem Gerät und werden nicht gesichert. Bewahre die Originale in einem privaten Ordner auf.</string>
+    <string name="certificates_add">PDF hinzufügen</string>
+    <string name="certificates_empty">Noch keine Zertifikate hinzugefügt.</string>
+    <string name="certificates_record">Zertifikat %1$d · %2$s</string>
+    <string name="certificates_open">Vorschau</string>
+    <string name="certificates_open_record">Vorschau: %1$s</string>
+    <string name="certificates_remove">Lokale Kopie entfernen</string>
+    <string name="certificates_remove_record">Lokale Kopie entfernen: %1$s</string>
+    <string name="certificates_remove_confirm">Nur die Kopie in dieser App wird entfernt. Die Originaldatei bleibt unverändert.</string>
+    <string name="certificates_removed">Lokale Kopie entfernt.</string>
+    <string name="certificates_error">Die PDF-Datei konnte nicht verarbeitet werden. Verwende eine lesbare, ungeschützte PDF mit höchstens 500 Seiten.</string>
+    <string name="certificates_too_large">Wähle eine PDF mit höchstens 20 MB.</string>
+    <string name="certificates_picker_error">Die Dateiauswahl konnte nicht geöffnet werden.</string>
+    <string name="certificates_importing">Private Kopie wird gespeichert…</string>
+    <string name="certificates_imported">Zertifikat auf diesem Gerät gespeichert.</string>
+    <string name="certificates_loading">Vorschau wird geladen…</string>
+    <string name="certificates_page_image">Vorschau der PDF-Seite</string>
+    <string name="certificates_previous">Zurück</string>
+    <string name="certificates_next">Weiter</string>
+    <string name="certificates_page">Seite %1$d von %2$d</string>
+</resources>

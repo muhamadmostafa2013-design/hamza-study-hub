@@ -98,7 +98,7 @@ class UiButtonSmokeTest {
     @Test fun homeDashboardNavigationShortcutsCanBeClickedWithoutCrash() {
         val activity = launch(HomeActivity::class.java)
         val root = activity.window.decorView
-        listOf("Schultasche", "Hausaufgaben", "Bücher", "Schulquellen").forEach { label ->
+        listOf(R.string.today_bag, R.string.today_homework, R.string.today_books, R.string.today_sources, R.string.today_whatsapp, R.string.certificates_title).map(activity::getString).forEach { label ->
             val clickable = clickableAncestorForText(root, label)
             assertNotNull("Expected clickable home shortcut for $label", clickable)
             assertTrue("Shortcut $label has no click handler", clickable!!.hasOnClickListeners())

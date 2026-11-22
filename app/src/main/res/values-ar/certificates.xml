@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="certificates_title">الشهادات</string>
+    <string name="certificates_private">تظل نسخ PDF على هذا الجهاز ولا تُنسخ احتياطيًا. احتفظ بالأصول في مجلد خاص.</string>
+    <string name="certificates_add">إضافة ملف PDF</string>
+    <string name="certificates_empty">لم تُضف أي شهادات بعد.</string>
+    <string name="certificates_record">شهادة %1$d · %2$s</string>
+    <string name="certificates_open">معاينة</string>
+    <string name="certificates_open_record">معاينة %1$s</string>
+    <string name="certificates_remove">إزالة النسخة المحلية</string>
+    <string name="certificates_remove_record">إزالة النسخة المحلية من %1$s</string>
+    <string name="certificates_remove_confirm">تُزال النسخة من التطبيق فقط. لن يتغير الملف الأصلي.</string>
+    <string name="certificates_removed">أُزيلت النسخة المحلية.</string>
+    <string name="certificates_error">تعذّرت معالجة الملف. جرّب ملف PDF غير محمي بكلمة مرور ولا يتجاوز 500 صفحة.</string>
+    <string name="certificates_too_large">اختر ملف PDF بحجم لا يزيد عن 20 ميغابايت.</string>
+    <string name="certificates_picker_error">تعذّر فتح نافذة اختيار الملف.</string>
+    <string name="certificates_importing">جارٍ حفظ نسخة خاصة…</string>
+    <string name="certificates_imported">حُفظت الشهادة على هذا الجهاز.</string>
+    <string name="certificates_loading">جارٍ تحميل المعاينة…</string>
+    <string name="certificates_page_image">معاينة صفحة PDF</string>
+    <string name="certificates_previous">السابقة</string>
+    <string name="certificates_next">التالية</string>
+    <string name="certificates_page">صفحة %1$d من %2$d</string>
+</resources>

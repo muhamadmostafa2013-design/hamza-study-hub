@@ -64,6 +64,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var homeworkScroll: ScrollView
     private var feedMode = FeedMode.TO_DO
     private val expandedDetails = mutableSetOf<String>()
+    private var pendingTodayFocus: String? = null
+
+    companion object {
+        const val EXTRA_TODAY_FOCUS = "com.hamza.studyhub.TODAY_FOCUS"
+        private const val STATE_TODAY_FOCUS = "todayFocus"
+        fun todayFocusKey(item: JSONObject): String = item.optString("externalId").takeIf { it.isNotBlank() }?.let { "id:$it" }
+            ?: "time:${item.optLong("timestamp", 0L)}"
+    }
 
     private val bookStore by lazy { BookLibraryStore(this) }
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -71,10 +79,17 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         feedMode = if (intent.getBooleanExtra("open_attention", false)) FeedMode.ATTENTION else FeedMode.TO_DO
+        pendingTodayFocus = savedInstanceState?.getString(STATE_TODAY_FOCUS)
+            ?: intent.takeUnless { it.action == Intent.ACTION_SEND }?.getStringExtra(EXTRA_TODAY_FOCUS)
         setContentView(buildScreen())
         requestNotificationPermissionIfNeeded()
         processIncomingShare(intent)
         scheduleSources()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingTodayFocus?.let { outState.putString(STATE_TODAY_FOCUS, it) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -250,6 +265,11 @@ class MainActivity : AppCompatActivity() {
             FeedMode.ALL -> HomeworkScreenPolicy.Filter.ALL
         }
         val visible = HomeworkScreenPolicy.visible(allItems, filter)
+        val focused = pendingTodayFocus?.let { key ->
+            visible.firstOrNull { todayFocusKey(it) == key }
+        }
+        pendingTodayFocus = null
+        if (focused != null) expandedDetails += detailKey(focused)
         feedContainer.removeAllViews()
         if (visible.isEmpty()) {
             val message = when (feedMode) {
@@ -260,9 +280,22 @@ class MainActivity : AppCompatActivity() {
             feedContainer.addView(HamzaUi.statusBox(this, message, Color.WHITE, HamzaUi.muted))
             return
         }
-        visible.forEach { feedContainer.addView(buildNotificationCard(it)) }
-        if (previousScroll > 0) homeworkScroll.post { homeworkScroll.scrollTo(0, previousScroll) }
+        var focusedCard: View? = null
+        visible.forEach { item ->
+            val card = buildNotificationCard(item)
+            feedContainer.addView(card)
+            if (item === focused) focusedCard = card
+        }
+        focusedCard?.let { card ->
+            homeworkScroll.post { homeworkScroll.scrollTo(0, card.top) }
+        } ?: run {
+            if (previousScroll > 0) homeworkScroll.post { homeworkScroll.scrollTo(0, previousScroll) }
+        }
     }
+
+    private fun detailKey(item: JSONObject) = item.optString("externalId")
+        .ifBlank { item.optString("contentFingerprint") }
+        .ifBlank { item.optLong("timestamp").toString() }
 
     private fun buildNotificationCard(item: JSONObject): View {
         val source = item.optString("source", "School")
@@ -274,9 +307,7 @@ class MainActivity : AppCompatActivity() {
             .ifBlank { originalTitle.substringAfter("•", "").trim() }
         val heading = if (homework) subject.ifBlank { originalTitle } else originalTitle
         val idTag = item.optLong("timestamp")
-        val detailKey = item.optString("externalId")
-            .ifBlank { item.optString("contentFingerprint") }
-            .ifBlank { idTag.toString() }
+        val detailKey = detailKey(item)
         val due = HomeworkScreenPolicy.dueStatus(item.optInt("dueDate", 0))
         val referenceDetected = item.optBoolean("bookReferenceDetected", false)
         val resolved = if (referenceDetected) BookAssignmentResolver(bookStore)

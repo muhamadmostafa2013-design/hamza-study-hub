@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whatsapp_import_title">إضافة واجب من واتساب</string>
+    <string name="whatsapp_import_help">الصق أو اكتب تعليمات الواجب المحددة فقط. احذف أسماء الطلاب الآخرين وأرقام الهواتف والرسائل غير المتعلقة بالواجب. التطبيق لا يتصل بواتساب ولا يحفظ سجل المجموعة.</string>
+    <string name="whatsapp_import_field">تعليمات الواجب</string>
+    <string name="whatsapp_import_save">حفظ الواجب</string>
+    <string name="whatsapp_import_confirm">هل تريد حفظ التعليمات على هذا الجهاز؟ الواجب المضاف من واتساب غير مؤكد. راجع المدرسة لتأكيد موعد التسليم.</string>
+    <string name="whatsapp_import_empty">أضف تعليمات الواجب قبل الحفظ.</string>
+    <string name="whatsapp_import_too_long">الحد الأقصى ٢٠٠٠ حرف. انسخ المطلوب فقط.</string>
+    <string name="whatsapp_import_error">تعذر الحفظ. النص ما زال موجودًا ويمكنك المحاولة مرة أخرى.</string>
+    <string name="whatsapp_import_saved">تم حفظ الواجب على هذا الجهاز باعتباره غير مؤكد.</string>
+    <string name="whatsapp_import_open">فتح الواجبات</string>
+    <string name="whatsapp_import_done">تم</string>
+</resources>
