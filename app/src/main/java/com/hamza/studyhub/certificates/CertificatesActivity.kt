@@ -1,12 +1,8 @@
 package com.hamza.studyhub.certificates
 
 import android.graphics.Bitmap
-import android.graphics.Color
-import android.graphics.Matrix
-import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Bundle
-import android.os.ParcelFileDescriptor
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -15,13 +11,18 @@ import android.widget.ScrollView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.hamza.studyhub.R
 import com.hamza.studyhub.ui.HamzaUi
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.Executors
-import kotlin.math.roundToInt
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class CertificatesActivity : AppCompatActivity() {
     private val work = Executors.newSingleThreadExecutor()
@@ -56,8 +57,19 @@ class CertificatesActivity : AppCompatActivity() {
         body.addView(status, HamzaUi.marginTop(this, 8))
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         body.addView(list, HamzaUi.marginTop(this, 8))
-        setContentView(ScrollView(this).apply { isFillViewport = true; addView(body) })
+        val scroll = ScrollView(this).apply { isFillViewport = true; addView(body) }
+        HamzaUi.insetScrollable(this, scroll, body, 18, 24, 28)
+        setContentView(scroll)
         refresh()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                importStatus.collect { message ->
+                    importButton.isEnabled = message != R.string.certificates_importing
+                    if (message != 0) status.setText(message)
+                    refresh()
+                }
+            }
+        }
     }
 
     private fun refresh() {
@@ -95,22 +107,21 @@ class CertificatesActivity : AppCompatActivity() {
     }
 
     private fun importPdf(uri: Uri) {
-        if (!importButton.isEnabled) return
-        importButton.isEnabled = false
-        status.setText(R.string.certificates_importing)
-        work.execute {
+        if (!importRunning.compareAndSet(false, true)) return
+        val app = applicationContext
+        val resolver = app.contentResolver
+        val folder = this.folder
+        importStatus.value = R.string.certificates_importing
+        importWork.execute {
             var staged: File? = null
             val message = try {
                 check(folder.mkdirs() || folder.isDirectory)
                 val destination = checkNotNull(CertificateStorage.fileIn(folder, CertificateStorage.newId()))
                 val temp = File.createTempFile("import-", ".part", folder)
                 staged = temp
-                val source = contentResolver.openInputStream(uri) ?: throw CertificateStorage.InvalidPdf()
+                val source = resolver.openInputStream(uri) ?: throw CertificateStorage.InvalidPdf()
                 source.use { input -> temp.outputStream().use { output -> CertificateStorage.copyPdf(input, output) } }
-                withPdf(temp) { renderer ->
-                    if (renderer.pageCount !in 1..CertificateStorage.MAX_PAGES) throw CertificateStorage.InvalidPdf()
-                    renderer.openPage(0).close()
-                }
+                checkNotNull(IsolatedPdfClient.request(app, temp, PdfIpc.VALIDATE))
                 check(!destination.exists() && temp.renameTo(destination))
                 R.string.certificates_imported
             } catch (_: CertificateStorage.PdfTooLarge) {
@@ -120,13 +131,8 @@ class CertificatesActivity : AppCompatActivity() {
             } finally {
                 staged?.delete()
             }
-            runOnUiThread {
-                if (!isDestroyed && !isFinishing) {
-                    status.setText(message)
-                    importButton.isEnabled = true
-                    refresh()
-                }
-            }
+            importRunning.set(false)
+            importStatus.value = message
         }
     }
 
@@ -143,14 +149,19 @@ class CertificatesActivity : AppCompatActivity() {
         }
         layout.addView(caption)
         layout.addView(image, ViewGroup.LayoutParams.MATCH_PARENT, dp(340))
-        val controls = LinearLayout(this)
+        val controls = LinearLayout(this).apply {
+            orientation = if (resources.configuration.fontScale >= 1.5f) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        }
         layout.addView(controls)
         val previous = HamzaUi.secondaryButton(this, getString(R.string.certificates_previous))
         val next = HamzaUi.secondaryButton(this, getString(R.string.certificates_next))
-        controls.addView(previous, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        controls.addView(next, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        fun controlParams() = if (controls.orientation == LinearLayout.VERTICAL)
+            LinearLayout.LayoutParams(-1, -2) else LinearLayout.LayoutParams(0, -2, 1f)
+        controls.addView(previous, controlParams())
+        controls.addView(next, controlParams())
+        val previewScroll = ScrollView(this).apply { addView(layout) }
         val dialog = AlertDialog.Builder(this).setTitle(R.string.certificates_title)
-            .setView(layout).setPositiveButton(android.R.string.ok, null).create()
+            .setView(previewScroll).setPositiveButton(android.R.string.ok, null).create()
         var pageIndex = 0
         var bitmap: Bitmap? = null
         fun display(page: Int) {
@@ -159,27 +170,8 @@ class CertificatesActivity : AppCompatActivity() {
             work.execute {
                 val result = runCatching {
                     val file = checkNotNull(CertificateStorage.fileIn(folder, record.name))
-                    withPdf(file) { renderer ->
-                        require(page in 0 until renderer.pageCount)
-                        renderer.openPage(page).use { renderedPage ->
-                            check(renderedPage.width > 0 && renderedPage.height > 0)
-                            val scale = minOf(1000f / renderedPage.width, 1300f / renderedPage.height)
-                            val output = Bitmap.createBitmap(
-                                (renderedPage.width * scale).roundToInt().coerceAtLeast(1),
-                                (renderedPage.height * scale).roundToInt().coerceAtLeast(1),
-                                Bitmap.Config.ARGB_8888
-                            )
-                            try {
-                                output.eraseColor(Color.WHITE)
-                                val transform = Matrix().apply { setScale(scale, scale) }
-                                renderedPage.render(output, null, transform, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                output to renderer.pageCount
-                            } catch (error: Exception) {
-                                output.recycle()
-                                throw error
-                            }
-                        }
-                    }
+                    val result = checkNotNull(IsolatedPdfClient.request(applicationContext, file, page))
+                    checkNotNull(result.image) to result.pages
                 }.getOrNull()
                 runOnUiThread {
                     if (!dialog.isShowing || isDestroyed || isFinishing) {
@@ -206,15 +198,10 @@ class CertificatesActivity : AppCompatActivity() {
         display(0)
     }
 
-    private inline fun <T> withPdf(file: File, block: (PdfRenderer) -> T): T {
-        val descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-        val renderer = try {
-            PdfRenderer(descriptor)
-        } catch (error: Exception) {
-            descriptor.close()
-            throw error
-        }
-        return renderer.use(block)
+    private companion object {
+        val importWork = Executors.newSingleThreadExecutor()
+        val importRunning = AtomicBoolean(false)
+        val importStatus = MutableStateFlow(0)
     }
 
     override fun onDestroy() {

@@ -15,6 +15,7 @@ import com.hamza.studyhub.teams.TeamsConnectionActivity
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -106,6 +107,12 @@ class UiButtonSmokeTest {
         }
     }
 
+    @Test fun todayFocusDistinguishesLocalAssignmentsSavedAtTheSameTime() {
+        val first = JSONObject().put("id", "demo-first").put("timestamp", 25L)
+        val second = JSONObject().put("id", "demo-second").put("timestamp", 25L)
+        assertNotEquals(MainActivity.todayFocusKey(first), MainActivity.todayFocusKey(second))
+    }
+
     private fun seedAttentionHomework() {
         feedFile.writeText(JSONObject().apply {
             put("source", "Untis")
@@ -139,7 +146,7 @@ class UiButtonSmokeTest {
         var target: TextView? = null
         fun walk(view: View) {
             if (target != null) return
-            if (view is TextView && view.visibility == View.VISIBLE && view.text.toString() == text) {
+            if (view is TextView && view.visibility == View.VISIBLE && view.tag != "today_primary" && view.text.toString() == text) {
                 target = view
                 return
             }

@@ -23,4 +23,9 @@
     <string name="today_other_language">العربية</string>
     <string name="today_unavailable">Aufgaben nicht verfügbar</string>
     <string name="today_unverified">%1$s • Bitte bei der Schule bestätigen</string>
+    <string name="today_loading">Aufgaben werden geladen…</string>
+    <string name="shared_review_title">Geteilten Text prüfen</string>
+    <string name="shared_review_before_save">Prüfe den Text vor dem Speichern. Bei fremden Namen oder Telefonnummern brich ab und teile nur die Aufgabe.</string>
+    <string name="shared_review_preview">Prüfe den Text vor dem Speichern. Bei fremden Namen oder Telefonnummern brich ab und teile nur die Aufgabe.\n\n%1$s</string>
+    <string name="shared_review_saved">Der geteilte Text wurde gespeichert.</string>
 </resources>

@@ -32,6 +32,7 @@
             <meta-data android:name="autoStoreLocales" android:value="true" />
         </service>
 
+        <service android:name=".certificates.IsolatedPdfRenderer" android:exported="false" android:isolatedProcess="true" />
         <activity android:name=".certificates.CertificatesActivity" android:exported="false" />
         <activity android:name=".HomeActivity" android:exported="false" />
         <activity android:name=".StudyPlanActivity" android:exported="false" />

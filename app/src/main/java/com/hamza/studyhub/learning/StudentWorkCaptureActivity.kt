@@ -95,7 +95,11 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
 
         content.addView(HamzaUi.subtitle(this,
             "تُحفظ الصورة حتى إن لم يمكن قراءة النص. القراءة التلقائية لا تدعم الكتابة العربية."), HamzaUi.marginTop(this, 14))
-        return ScrollView(this).apply { isFillViewport = true; addView(content) }
+        return ScrollView(this).apply {
+            isFillViewport = true
+            addView(content)
+            HamzaUi.insetScrollable(this@StudentWorkCaptureActivity, this, content, 18, 24, 28)
+        }
     }
 
     private fun startCameraCapture() {
@@ -118,15 +122,32 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
     }
 
     private fun analyzeAndStore(inputUri: Uri, stableImageUri: String) {
-        statusText.text = "جاري حفظ المحاولة وقراءة الكتابة…"
+        val attempt = runCatching { savePhotoAttempt(stableImageUri) }.getOrElse {
+            statusText.text = "تعذر تسجيل المحاولة. جرّب مرة أخرى."
+            return
+        }
+        statusText.text = "تم حفظ المحاولة رقم ${attempt.attemptNumber}. جاري محاولة قراءة النص…"
+        fun finish(extractedText: String?) {
+            val savedText = !extractedText.isNullOrBlank() &&
+                runCatching { store.updateExtractedText(attempt.id, extractedText) }.getOrDefault(false)
+            if (!isDestroyed && !isFinishing) {
+                statusText.text = if (savedText)
+                    "تم حفظ المحاولة رقم ${attempt.attemptNumber} وقراءة نص مبدئي منها."
+                else "تم حفظ المحاولة رقم ${attempt.attemptNumber}. الصورة محفوظة حتى لو لم تُقرأ الكتابة بوضوح."
+            }
+        }
         runCatching { InputImage.fromFilePath(this, inputUri) }
-            .onSuccess { image -> TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(image)
-                .addOnSuccessListener { saveAttempt(stableImageUri, it.text.trim().takeIf(String::isNotBlank)) }
-                .addOnFailureListener { saveAttempt(stableImageUri, null) } }
-            .onFailure { saveAttempt(stableImageUri, null) }
+            .onSuccess { image ->
+                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                recognizer.process(image)
+                    .addOnSuccessListener { finish(it.text.trim().takeIf(String::isNotBlank)) }
+                    .addOnFailureListener { finish(null) }
+                    .addOnCompleteListener { recognizer.close() }
+            }
+            .onFailure { finish(null) }
     }
 
-    private fun saveAttempt(imageUri: String, extractedText: String?) {
+    private fun savePhotoAttempt(imageUri: String): StudentAttempt {
         val fingerprint = intent.getStringExtra(EXTRA_ASSIGNMENT_FINGERPRINT)?.takeIf { it.isNotBlank() }
             ?: "manual-${System.currentTimeMillis()}"
         val attempt = StudentAttempt(
@@ -136,13 +157,9 @@ class StudentWorkCaptureActivity : AppCompatActivity() {
             bookId = intent.getStringExtra(EXTRA_BOOK_ID)?.takeIf { it.isNotBlank() },
             page = intent.getIntExtra(EXTRA_PAGE, 0).takeIf { it > 0 },
             exercise = intent.getStringExtra(EXTRA_EXERCISE)?.takeIf { it.isNotBlank() },
-            capturedAt = System.currentTimeMillis(), imageUri = imageUri, extractedText = extractedText,
-            attemptNumber = store.nextAttemptNumber(fingerprint)
+            capturedAt = System.currentTimeMillis(), imageUri = imageUri
         )
-        store.appendAttempt(attempt)
-        statusText.text = if (!extractedText.isNullOrBlank())
-            "تم حفظ المحاولة رقم ${attempt.attemptNumber} وقراءة نص مبدئي منها للتحليل لاحقًا."
-        else "تم حفظ المحاولة رقم ${attempt.attemptNumber}. الصورة محفوظة حتى لو لم تُقرأ الكتابة بوضوح."
+        return store.saveNewAttempt(attempt)
     }
 
     private fun copyIntoPrivateStorage(uri: Uri): File? = runCatching {

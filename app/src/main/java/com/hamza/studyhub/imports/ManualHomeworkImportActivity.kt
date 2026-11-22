@@ -99,10 +99,9 @@ class ManualHomeworkImportActivity : AppCompatActivity() {
         body.addView(HamzaUi.secondaryButton(this, getString(android.R.string.cancel)).apply {
             setOnClickListener { finish() }
         }, HamzaUi.marginTop(this, 8))
-        setContentView(ScrollView(this).apply {
-            isFillViewport = true
-            addView(body)
-        })
+        val scroll = ScrollView(this).apply { isFillViewport = true; addView(body) }
+        HamzaUi.insetScrollable(this, scroll, body, 20, 20, 20, avoidIme = true)
+        setContentView(scroll)
     }
 }
 

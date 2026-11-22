@@ -16,6 +16,7 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -69,8 +70,15 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_TODAY_FOCUS = "com.hamza.studyhub.TODAY_FOCUS"
         private const val STATE_TODAY_FOCUS = "todayFocus"
-        fun todayFocusKey(item: JSONObject): String = item.optString("externalId").takeIf { it.isNotBlank() }?.let { "id:$it" }
-            ?: "time:${item.optLong("timestamp", 0L)}"
+        private const val STATE_EXPANDED = "expandedAssignments"
+        fun todayFocusKey(item: JSONObject): String {
+            for (field in listOf("externalId", "id", "notificationKey")) {
+                item.optString(field).takeIf { it.isNotBlank() }?.let { return "$field:$it" }
+            }
+            val time = item.optLong("timestamp", 0L)
+            return item.optString("contentFingerprint").takeIf { it.isNotBlank() }
+                ?.let { "content:$time:$it" } ?: "time:$time"
+        }
     }
 
     private val bookStore by lazy { BookLibraryStore(this) }
@@ -79,8 +87,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         feedMode = if (intent.getBooleanExtra("open_attention", false)) FeedMode.ATTENTION else FeedMode.TO_DO
-        pendingTodayFocus = savedInstanceState?.getString(STATE_TODAY_FOCUS)
-            ?: intent.takeUnless { it.action == Intent.ACTION_SEND }?.getStringExtra(EXTRA_TODAY_FOCUS)
+        pendingTodayFocus = if (savedInstanceState == null)
+            intent.takeUnless { it.action == Intent.ACTION_SEND }?.getStringExtra(EXTRA_TODAY_FOCUS)
+            else savedInstanceState.getString(STATE_TODAY_FOCUS)
+        savedInstanceState?.getStringArrayList(STATE_EXPANDED)?.let(expandedDetails::addAll)
         setContentView(buildScreen())
         requestNotificationPermissionIfNeeded()
         processIncomingShare(intent)
@@ -90,12 +100,17 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         pendingTodayFocus?.let { outState.putString(STATE_TODAY_FOCUS, it) }
+        outState.putStringArrayList(STATE_EXPANDED, ArrayList(expandedDetails.take(50)))
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.getBooleanExtra("open_attention", false)) feedMode = FeedMode.ATTENTION
+        if (intent.action != Intent.ACTION_SEND) {
+            pendingTodayFocus = intent.getStringExtra(EXTRA_TODAY_FOCUS)
+            if (pendingTodayFocus != null) feedMode = FeedMode.TO_DO
+        }
         processIncomingShare(intent)
     }
 
@@ -293,9 +308,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun detailKey(item: JSONObject) = item.optString("externalId")
-        .ifBlank { item.optString("contentFingerprint") }
-        .ifBlank { item.optLong("timestamp").toString() }
+    private fun detailKey(item: JSONObject) = todayFocusKey(item)
 
     private fun buildNotificationCard(item: JSONObject): View {
         val source = item.optString("source", "School")
@@ -563,9 +576,7 @@ class MainActivity : AppCompatActivity() {
         when {
             incoming.type?.startsWith("text/") == true ->
                 incoming.getStringExtra(Intent.EXTRA_TEXT).orEmpty().takeIf { it.isNotBlank() }?.let {
-                    saveImportedContent("واجب تمت مشاركته", it, "Shared text")
-                    showShareStatus("تمت إضافة النص المشارك.")
-                    refreshFeed()
+                    confirmSharedContent("واجب تمت مشاركته", it, "Shared text")
                 }
             incoming.type?.startsWith("image/") == true -> {
                 @Suppress("DEPRECATION")
@@ -584,13 +595,31 @@ class MainActivity : AppCompatActivity() {
                     if (text.isBlank()) {
                         showShareStatus("لم أستطع استخراج نص واضح من الصورة.")
                     } else {
-                        saveImportedContent("واجب مقروء من صورة", text, "Screenshot OCR")
-                        showShareStatus("تمت قراءة الصورة وإضافتها.")
-                        refreshFeed()
+                        confirmSharedContent("واجب مقروء من صورة", text, "Screenshot OCR")
                     }
                 }
                 .addOnFailureListener { showShareStatus("حدث خطأ أثناء قراءة الصورة.") }
         }.onFailure { showShareStatus("تعذر فتح الصورة.") }
+    }
+
+    private fun confirmSharedContent(title: String, text: String, method: String) {
+        if (isFinishing || isDestroyed) return
+        val snippet = text.trim()
+        if (snippet.length > 2000) {
+            showShareStatus(getString(R.string.whatsapp_import_too_long))
+            return
+        }
+        showShareStatus(getString(R.string.shared_review_before_save))
+        AlertDialog.Builder(this)
+            .setTitle(R.string.shared_review_title)
+            .setMessage(getString(R.string.shared_review_preview, snippet))
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.whatsapp_import_save) { _, _ ->
+                if (runCatching { saveImportedContent(title, snippet, method) }.isSuccess) {
+                    showShareStatus(getString(R.string.shared_review_saved))
+                    refreshFeed()
+                } else showShareStatus(getString(R.string.whatsapp_import_error))
+            }.show()
     }
 
     private fun saveImportedContent(title: String, text: String, importMethod: String) {

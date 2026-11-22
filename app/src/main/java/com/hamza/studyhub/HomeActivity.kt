@@ -164,12 +164,14 @@ class HomeActivity : AppCompatActivity() {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(if (german) "ar" else "de"))
         }, gap(10))
 
-        showAssignment(null, false)
+        assignmentTitle.text = getString(R.string.today_loading)
+        primaryAction.isEnabled = false
         return scroll
     }
 
     private fun showAssignment(item: JSONObject?, hasError: Boolean) {
         nextAssignment = item
+        primaryAction.isEnabled = true
         if (item == null) {
             assignmentTitle.text = getString(if (hasError) R.string.today_unavailable else R.string.today_no_assignment)
             assignmentDetail.text = getString(if (hasError) R.string.today_read_error else R.string.today_no_assignment_hint)

@@ -23,4 +23,9 @@
     <string name="today_other_language">Deutsch</string>
     <string name="today_unavailable">الواجبات غير متاحة</string>
     <string name="today_unverified">%1$s • يحتاج تأكيد من المدرسة</string>
+    <string name="today_loading">جاري تحميل الواجبات…</string>
+    <string name="shared_review_title">راجع النص المشارك</string>
+    <string name="shared_review_before_save">راجع النص قبل ما تحفظه. لو فيه أسماء أو أرقام مش لازمة، الغِ العملية وانسخ المطلوب بس.</string>
+    <string name="shared_review_preview">راجع النص قبل ما تحفظه. لو فيه أسماء أو أرقام مش لازمة، الغِ العملية وانسخ المطلوب بس.\n\n%1$s</string>
+    <string name="shared_review_saved">تم حفظ النص المشارك.</string>
 </resources>
