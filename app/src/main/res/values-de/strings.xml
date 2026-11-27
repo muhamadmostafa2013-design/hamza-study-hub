@@ -13,5 +13,5 @@
     <string name="image_open_failed">Das Bild konnte nicht geöffnet werden.</string>
     <string name="qr_invalid">Ungültiger QR-Code. Er muss mit untis://setschool beginnen.</string>
     <string name="untis_connected_first_sync">%1$s ist verbunden. Die erste Synchronisierung läuft…</string>
-    <string name="today_deadline_digest">Offene Hausaufgaben\nHeute fällig: %1$d\nÜberfällig: %2$d\nOhne Abgabedatum: %3$d</string>
+    <string name="today_deadline_digest">Offene Hausaufgaben\nHeute fällig: %1$d\nÜberfällig: %2$d\nAnstehend: %3$d\nOhne Abgabedatum: %4$d</string>
 </resources>

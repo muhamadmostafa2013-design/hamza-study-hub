@@ -1,6 +1,6 @@
 # Family homework agenda review
 
-This review adds an offline Home summary of open homework due today, overdue, or without a usable due date. Future dated homework stays available through the existing homework list. Completed work and non-homework school messages are not counted. No school date, source flag, completion status, or stored data is changed. The existing next-homework selection remains intact. There is no new permission or integration.
+This review adds an offline Home summary of open homework due today, overdue, upcoming, or without a usable due date. Completed work and non-homework school messages are not counted. No school date, source flag, completion status, or stored data is changed. The existing next-homework selection remains intact. There is no new permission or integration.
 
 ## GitHub product references
 

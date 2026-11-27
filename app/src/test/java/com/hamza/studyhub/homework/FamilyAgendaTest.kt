@@ -29,6 +29,7 @@ class FamilyAgendaTest {
         assertSame(recentOverdue, result.next)
         assertEquals(1, result.dueToday)
         assertEquals(2, result.overdue)
+        assertEquals(1, result.upcoming)
         assertEquals(2, result.undated)
         assertEquals("COMMUNITY", undatedManual.getString("evidenceTrust"))
         assertEquals(0, undatedManual.getInt("dueDate"))
@@ -39,7 +40,7 @@ class FamilyAgendaTest {
             listOf(work(20261127).put("completed", true)), today
         )
         assertNull(result.next)
-        assertEquals(listOf(0, 0, 0), listOf(result.dueToday, result.overdue, result.undated))
+        assertEquals(listOf(0, 0, 0, 0), listOf(result.dueToday, result.overdue, result.upcoming, result.undated))
     }
 
     @Test fun usesOneLocalDayAtTheMonthBoundary() {
@@ -48,6 +49,7 @@ class FamilyAgendaTest {
         val result = HomeworkScreenPolicy.familyAgenda(listOf(first, late), LocalDate.of(2026, 12, 1))
         assertEquals(1, result.dueToday)
         assertEquals(1, result.overdue)
+        assertEquals(0, result.upcoming)
         assertEquals(0, result.undated)
     }
 }

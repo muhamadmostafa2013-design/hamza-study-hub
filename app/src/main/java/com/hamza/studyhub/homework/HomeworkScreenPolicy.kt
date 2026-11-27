@@ -67,13 +67,14 @@ object HomeworkScreenPolicy {
         )
     }
 
-    data class FamilyAgenda(val next: JSONObject?, val dueToday: Int, val overdue: Int, val undated: Int)
+    data class FamilyAgenda(val next: JSONObject?, val dueToday: Int, val overdue: Int, val upcoming: Int, val undated: Int)
 
     /** Local date summary of unfinished homework only. The existing next-item ordering is preserved. */
     fun familyAgenda(feed: List<JSONObject>, today: LocalDate = LocalDate.now()): FamilyAgenda {
         val open = visible(feed, Filter.TO_DO, today)
         var dueToday = 0
         var overdue = 0
+        var upcoming = 0
         var undated = 0
         for (item in open) {
             val due = dueStatus(item.optInt("dueDate", 0), today).date
@@ -81,9 +82,10 @@ object HomeworkScreenPolicy {
                 due == null -> undated++
                 due == today -> dueToday++
                 due.isBefore(today) -> overdue++
+                else -> upcoming++
             }
         }
-        return FamilyAgenda(open.firstOrNull(), dueToday, overdue, undated)
+        return FamilyAgenda(open.firstOrNull(), dueToday, overdue, upcoming, undated)
     }
 
     fun preview(text: String, limit: Int = 170): String {

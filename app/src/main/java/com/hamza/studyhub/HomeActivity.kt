@@ -184,7 +184,7 @@ class HomeActivity : AppCompatActivity() {
             return
         }
         deadlineDigest.text = getString(
-            R.string.today_deadline_digest, agenda.dueToday, agenda.overdue, agenda.undated
+            R.string.today_deadline_digest, agenda.dueToday, agenda.overdue, agenda.upcoming, agenda.undated
         )
         deadlineDigest.visibility = View.VISIBLE
     }
