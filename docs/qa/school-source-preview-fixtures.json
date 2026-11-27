@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "state": "proposed_product_acceptance",
+  "warning": "Original synthetic fixtures; not real provider message formats or app passes.",
+  "cases": [
+    {
+      "id": "relative-deadline",
+      "source": "CLASSROOM_GUARDIAN_EXCERPT",
+      "input": {
+        "sentDay": "2026-11-26",
+        "sourceZone": "Africa/Cairo",
+        "excerpt": "Deutsch: Lies den Dialog. Abgabe morgen.\nMathe: Übung 4. Abgabe 03/04."
+      },
+      "expect": {
+        "rows": [
+          {
+            "subject": "Deutsch",
+            "suggestedDate": "2026-11-27",
+            "requiresConfirmation": true
+          },
+          {
+            "subject": "Mathe",
+            "suggestedDate": null,
+            "requiresConfirmation": true
+          }
+        ],
+        "neverUseImportTime": true
+      }
+    },
+    {
+      "id": "relative-without-sent-context",
+      "source": "TEAMS_GUARDIAN_EXCERPT",
+      "input": {
+        "sentDay": null,
+        "sourceZone": null,
+        "excerpt": "Naturkunde: Gib die Zeichnung morgen ab."
+      },
+      "expect": {
+        "rows": [
+          {
+            "subject": "Naturkunde",
+            "suggestedDate": null,
+            "requiresConfirmation": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "same-title-distinct",
+      "source": "MANUAL_EXCERPTS",
+      "input": {
+        "rows": [
+          {
+            "profile": "synthetic-A",
+            "course": "Deutsch",
+            "title": "Übung 1"
+          },
+          {
+            "profile": "synthetic-A",
+            "course": "Mathe",
+            "title": "Übung 1"
+          },
+          {
+            "profile": "synthetic-B",
+            "course": "Deutsch",
+            "title": "Übung 1"
+          }
+        ]
+      },
+      "expect": {
+        "rowCount": 3,
+        "merge": false
+      }
+    },
+    {
+      "id": "known-id-new-deadline",
+      "source": "AUTHORIZED_CLASSROOM_API_FIXTURE",
+      "input": {
+        "existing": {
+          "profile": "synthetic-A",
+          "courseId": "qa-de",
+          "itemId": "qa-7",
+          "dueUtc": "2026-11-25T08:00:00Z",
+          "parentCompleted": true
+        },
+        "incoming": {
+          "profile": "synthetic-A",
+          "courseId": "qa-de",
+          "itemId": "qa-7",
+          "dueDate": "2026-11-27",
+          "dueTime": null
+        }
+      },
+      "expect": {
+        "rowCount": 1,
+        "newDueUtc": "2026-11-27T23:59:00Z",
+        "newCairoDate": "2026-11-28",
+        "parentCompleted": true,
+        "showChangeBeforeApply": true
+      }
+    },
+    {
+      "id": "snapshot-omission",
+      "source": "CLASSROOM_GUARDIAN_EXCERPT",
+      "input": {
+        "old": {
+          "providerStatus": "missing",
+          "asOf": "2026-11-19T12:00:00Z",
+          "parentCompleted": true
+        },
+        "newRows": []
+      },
+      "expect": {
+        "providerStatus": "missing",
+        "asOf": "2026-11-19T12:00:00Z",
+        "parentCompleted": true,
+        "deleted": false
+      }
+    },
+    {
+      "id": "calendar-date-time-distinction",
+      "source": "SELECTED_ICS_FILE",
+      "input": {
+        "calendarLines": [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Study Hub Test//Synthetic Calendar//EN",
+          "BEGIN:VEVENT",
+          "UID:qa-all-day@example.invalid",
+          "DTSTAMP:20261120T120000Z",
+          "DTSTART;VALUE=DATE:20261127",
+          "SUMMARY:School event",
+          "END:VEVENT",
+          "BEGIN:VTODO",
+          "UID:qa-assignment@example.invalid",
+          "DTSTAMP:20261120T120000Z",
+          "DUE:20261127T230000Z",
+          "SUMMARY:Homework: workbook exercise",
+          "END:VTODO",
+          "BEGIN:VEVENT",
+          "UID:qa-floating@example.invalid",
+          "DTSTAMP:20261120T120000Z",
+          "DTSTART:20261127T180000",
+          "SUMMARY:Evening event",
+          "END:VEVENT",
+          "END:VCALENDAR"
+        ]
+      },
+      "expect": {
+        "allDay": {
+          "kind": "EVENT",
+          "date": "2026-11-27",
+          "time": null
+        },
+        "timed": {
+          "kind": "HOMEWORK",
+          "utc": "2026-11-27T23:00:00Z",
+          "cairoDate": "2026-11-28"
+        },
+        "floating": {
+          "kind": "EVENT",
+          "localWallTime": "2026-11-27T18:00:00",
+          "instant": null
+        }
+      }
+    },
+    {
+      "id": "selective-clipboard",
+      "source": "TEAMS_GUARDIAN_EXCERPT",
+      "input": {
+        "excerpt": "From: Synthetic School <robot@example.invalid>\nDeutsch: Lies Seite 12.\nUnrelated link: https://example.invalid/unrelated\nFooter: classroom contacts"
+      },
+      "expect": {
+        "storedSubject": "Deutsch",
+        "storedTask": "Lies Seite 12.",
+        "retainEntireMessage": false,
+        "openNetworkLinks": false
+      }
+    }
+  ]
+}
