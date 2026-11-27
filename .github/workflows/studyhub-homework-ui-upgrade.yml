@@ -6,6 +6,10 @@ name: Study Hub offline homework upgrade
 permissions:
   contents: read
 
+concurrency:
+  group: studyhub-synthetic-homework-ui-upgrade
+  cancel-in-progress: true
+
 jobs:
   debug-validation:
     runs-on: ubuntu-latest
@@ -182,7 +186,15 @@ jobs:
                   adb("shell", "rm", "-f", DUMP)
                   adb("shell", "uiautomator", "dump", DUMP)
                   doc = ET.fromstring(adb("shell", "cat", DUMP))
-                  return [n for n in doc.iter("node") if n.get("package") == PACKAGE]
+                  nodes = list(doc.iter("node"))
+                  deny = next((n for n in nodes
+                               if n.get("package", "").endswith(".permissioncontroller")
+                               and n.get("resource-id", "").endswith(":id/permission_deny_button")), None)
+                  if deny is not None:
+                      tap_node("decline optional OS permission", deny)
+                      print("Declined optional OS permission using the system UI.", flush=True)
+                      return []
+                  return [n for n in nodes if n.get("package") == PACKAGE]
               except (ET.ParseError, subprocess.CalledProcessError):
                   return []
 
@@ -199,11 +211,16 @@ jobs:
 
 
           def label(*labels):
-              return lambda node: node.get("text") in labels or node.get("content-desc") in labels
+              expected = {label.casefold() for label in labels}
+              return lambda node: (node.get("text", "").casefold() in expected
+                                   or node.get("content-desc", "").casefold() in expected)
 
 
           def tap(stage, predicate, scroll=False):
-              node = find(stage, predicate, scroll)
+              tap_node(stage, find(stage, predicate, scroll))
+
+
+          def tap_node(stage, node):
               left, top, right, bottom = map(int, re.findall(r"\d+", node.attrib["bounds"]))
               assert left < right and top < bottom, f"Non-visible bounds: {stage}"
               adb("shell", "input", "tap", str((left + right) // 2), str((top + bottom) // 2))
