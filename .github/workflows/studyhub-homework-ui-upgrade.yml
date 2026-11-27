@@ -258,6 +258,18 @@ jobs:
               print(f"{stage}: independently confirmed exact synthetic record in app-private storage (read-only).", flush=True)
 
 
+          def deny_optional_notifications():
+              # Establish an existing user opt-out on this disposable emulator only.
+              permission = "android.permission.POST_NOTIFICATIONS"
+              adb("shell", "pm", "revoke", "--user", "0", PACKAGE, permission)
+              adb("shell", "pm", "set-permission-flags", "--user", "0", PACKAGE, permission, "user-set", "user-fixed")
+              installed = adb("shell", "dumpsys", "package", PACKAGE)
+              runtime = [line for line in installed.splitlines()
+                         if f"{permission}:" in line and "granted=false" in line and "USER_FIXED" in line]
+              assert runtime, "Notification opt-out could not be verified on the disposable emulator"
+              print("Disposable emulator: notification permission stays denied.", flush=True)
+
+
           def verify_version(version):
               installed = adb("shell", "dumpsys", "package", PACKAGE)
               assert re.search(rf"\bversionCode={version}\b", installed), "Unexpected installed version"
@@ -289,6 +301,7 @@ jobs:
 
           assert "Success" in adb("install", PREVIOUS)
           verify_version("20261126")
+          deny_optional_notifications()
           launch_and_skip()
           tap("manual import at home", label("إضافة واجب من واتساب", "Aufgabe aus WhatsApp hinzufügen"), scroll=True)
           tap("homework editor", lambda n: n.get("class") == "android.widget.EditText")
@@ -321,6 +334,7 @@ jobs:
           adb("shell", "am", "force-stop", PACKAGE)
           assert "Success" in adb("install", "-r", CANDIDATE)
           verify_version("20261127")
+          deny_optional_notifications()
           assert_local_fixture("Upgraded version")
           launch_and_skip()
           tap("open featured assignment from home", featured)
