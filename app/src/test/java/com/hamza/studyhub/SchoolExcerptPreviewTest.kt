@@ -2,6 +2,7 @@ package com.hamza.studyhub
 
 import android.content.Context
 import android.content.DialogInterface
+import android.os.Looper
 import android.view.View
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
@@ -43,12 +44,15 @@ class SchoolExcerptPreviewTest {
         excerpt.setText("Aufgabe drei bis Freitag.")
         val preview = content.findViewWithTag<View>("school_excerpt_preview")
         preview.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
         assertTrue(SchoolFeedStore.read(context).isEmpty())
         (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
         assertTrue(SchoolFeedStore.read(context).isEmpty())
         excerpt.setText("Aufgabe vier bis Freitag.")
         preview.performClick()
         (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
         val saved = SchoolFeedStore.read(context).single()
         assertEquals("Aufgabe vier bis Freitag.", saved.getString("text"))
         assertEquals("caregiver_snapshot", saved.getString("sourceMode"))
