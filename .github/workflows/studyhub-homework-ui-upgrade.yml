@@ -1,0 +1,279 @@
+name: Study Hub offline homework upgrade
+'on':
+  push:
+    branches: ['review/studyhub-homework-ui-upgrade-20261127']
+
+permissions:
+  contents: read
+
+jobs:
+  debug-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      VERSION_CODE: '20261127'
+      VERSION_NAME: '0.5.4-qa'
+    steps:
+      - name: Check out pinned privacy candidate
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: 7618495fc586481dec57154898c187454acf3562
+          persist-credentials: false
+
+      - name: Verify candidate and preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "7618495fc586481dec57154898c187454acf3562"
+          printf 'Runner ImageOS=%s ImageVersion=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+          sdk="${ANDROID_SDK_ROOT:?Android SDK unavailable}"
+          test -f "$sdk/platforms/android-37.0/android.jar"
+          test -x "$sdk/build-tools/37.0.0/aapt2"
+          test -x "$sdk/build-tools/37.0.0/apksigner"
+          cat "$sdk/platforms/android-37.0/source.properties" "$sdk/build-tools/37.0.0/source.properties"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          python3 scripts/check_backup_policy.py
+
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '9.5.0'
+          cache-disabled: true
+
+      - name: Build debug APK and run unit tests
+        shell: bash
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug --stacktrace
+
+      - name: Verify debug APK identity and packaged backup attributes
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          tools="$ANDROID_HOME/build-tools/37.0.0"
+          sha256sum "$apk"
+          "$tools/apksigner" verify --print-certs "$apk"
+          "$tools/aapt2" dump badging "$apk" > "$RUNNER_TEMP/studyhub-badging.txt"
+          grep -F "package: name='com.hamza.studyhub.debug'" "$RUNNER_TEMP/studyhub-badging.txt"
+          "$tools/aapt2" dump xmltree --file AndroidManifest.xml "$apk" > "$RUNNER_TEMP/studyhub-manifest.txt"
+          grep -E 'allowBackup.*(false|0x0)$' "$RUNNER_TEMP/studyhub-manifest.txt"
+          grep -F 'fullBackupContent' "$RUNNER_TEMP/studyhub-manifest.txt"
+          grep -F 'dataExtractionRules' "$RUNNER_TEMP/studyhub-manifest.txt"
+          python3 -c 'from zipfile import ZipFile; z=ZipFile("app/build/outputs/apk/debug/app-debug.apk"); assert {"res/xml/backup_rules.xml","res/xml/data_extraction_rules.xml"} <= set(z.namelist())'
+
+      - name: Run Android lint
+        shell: bash
+        run: gradle --no-daemon :app:lintDebug --stacktrace
+
+      - name: Check out prior build for same-signer update
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: e27882d077e07989d8022fd72f4a0b3a3db97aa8
+          path: upgrade-base
+          persist-credentials: false
+
+      - name: Build prior debug APK and compare signers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C upgrade-base rev-parse HEAD)" = "e27882d077e07989d8022fd72f4a0b3a3db97aa8"
+          VERSION_CODE=20261126 VERSION_NAME=0.5.4-prior gradle --no-daemon -p upgrade-base :app:assembleDebug --stacktrace
+          prev=upgrade-base/app/build/outputs/apk/debug/app-debug.apk
+          next=app/build/outputs/apk/debug/app-debug.apk
+          apksigner="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          "$apksigner" verify --print-certs "$prev" > "$RUNNER_TEMP/studyhub-prev-signer.txt"
+          "$apksigner" verify --print-certs "$next" > "$RUNNER_TEMP/studyhub-next-signer.txt"
+          python3 - "$RUNNER_TEMP/studyhub-prev-signer.txt" "$RUNNER_TEMP/studyhub-next-signer.txt" <<'CERT_CHECK'
+          import re
+          import sys
+          from pathlib import Path
+          
+          FINGERPRINT = re.compile(
+              r"[ \t]*(?:V2 Signer: certificate|Signer #[1-9][0-9]* certificate)"
+              r" SHA-256 digest:[ \t]*([0-9a-f]{64})[ \t]*", re.IGNORECASE
+          )
+          
+          
+          def fingerprint(out, label):
+              matches = [m.group(1).lower() for line in out.splitlines()
+                         if (m := FINGERPRINT.fullmatch(line))]
+              if len(matches) != 1:
+                  raise ValueError(f"{label}: expected exactly one APK signing digest, found {len(matches)}")
+              return matches[0]
+          
+          
+          def same_signer(previous, candidate):
+              if fingerprint(previous, "prior APK") != fingerprint(candidate, "candidate APK"):
+                  raise ValueError("Verified debug APK signer fingerprints differ")
+          
+          
+          def selftest():
+              one = "a" * 64
+              old = "Signer #1 certificate SHA-256 digest: " + one
+              new = "V2 Signer: certificate SHA-256 digest: " + one.upper()
+              same_signer(old, new)
+              checks = [
+                  ("", new, "found 0"),
+                  (old + "\n" + old, new, "found 2"),
+                  (old[:-1], new, "found 0"),
+                  (old, new[:-1] + "B", "fingerprints differ"),
+              ]
+              for prev, nxt, want in checks:
+                  try:
+                      same_signer(prev, nxt)
+                  except ValueError as exc:
+                      if want not in str(exc):
+                          raise
+                  else:
+                      raise AssertionError(f"Expected parser rejection: {want}")
+              print("Signer parser fixtures passed: format variants, empty, ambiguous, malformed and unequal")
+          
+          
+          selftest()
+          if len(sys.argv) == 3:
+              try:
+                  same_signer(*(Path(file).read_text(encoding="utf-8") for file in sys.argv[1:]))
+              except (ValueError, OSError) as exc:
+                  sys.exit(str(exc))
+              print("Prior and candidate APKs share one verified debug signer.")
+          CERT_CHECK
+          aapt2="$ANDROID_HOME/build-tools/37.0.0/aapt2"
+          "$aapt2" dump badging "$prev" > "$RUNNER_TEMP/studyhub-prev-identity.txt"
+          "$aapt2" dump badging "$next" > "$RUNNER_TEMP/studyhub-next-identity.txt"
+          grep -F "package: name='com.hamza.studyhub.debug' versionCode='20261126'" "$RUNNER_TEMP/studyhub-prev-identity.txt"
+          grep -F "package: name='com.hamza.studyhub.debug' versionCode='20261127'" "$RUNNER_TEMP/studyhub-next-identity.txt"
+          sha256sum "$prev" "$next"
+
+      - name: Enable hardware acceleration on disposable runner
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-studyhub.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Prepare synthetic UI test harness
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/studyhub-homework-ui-upgrade.py" <<'PYTHON'
+          import re
+          import subprocess
+          import time
+          import xml.etree.ElementTree as ET
+
+          PACKAGE = "com.hamza.studyhub.debug"
+          LAUNCHER = f"{PACKAGE}/com.hamza.studyhub.LaunchActivity"
+          PREVIOUS = "upgrade-base/app/build/outputs/apk/debug/app-debug.apk"
+          CANDIDATE = "app/build/outputs/apk/debug/app-debug.apk"
+          HOMEWORK = "Hausaufgabe Deutsch Seite 12 Aufgabe 3 SYNTHETIC-UPGRADE-QA-42"
+          DUMP = "/data/local/tmp/studyhub-synthetic-window.xml"
+
+
+          def adb(*args):
+              return subprocess.check_output(["adb", *args], text=True, encoding="utf-8", timeout=90).strip()
+
+
+          def snapshot():
+              try:
+                  adb("shell", "rm", "-f", DUMP)
+                  adb("shell", "uiautomator", "dump", DUMP)
+                  doc = ET.fromstring(adb("shell", "cat", DUMP))
+                  return [n for n in doc.iter("node") if n.get("package") == PACKAGE]
+              except (ET.ParseError, subprocess.CalledProcessError):
+                  return []
+
+
+          def find(stage, predicate, scroll=False):
+              for attempt in range(10):
+                  found = [n for n in snapshot() if predicate(n)]
+                  if found:
+                      return found[0]
+                  if scroll and attempt < 6:
+                      adb("shell", "input", "swipe", str(width // 2), str(height * 3 // 4), str(width // 2), str(height // 3), "350")
+                  time.sleep(0.5)
+              raise AssertionError(f"Expected app UI not visible: {stage}")
+
+
+          def label(*labels):
+              return lambda node: node.get("text") in labels or node.get("content-desc") in labels
+
+
+          def tap(stage, predicate, scroll=False):
+              node = find(stage, predicate, scroll)
+              left, top, right, bottom = map(int, re.findall(r"\d+", node.attrib["bounds"]))
+              assert left < right and top < bottom, f"Non-visible bounds: {stage}"
+              adb("shell", "input", "tap", str((left + right) // 2), str((top + bottom) // 2))
+
+
+          def verify_version(version):
+              installed = adb("shell", "dumpsys", "package", PACKAGE)
+              assert re.search(rf"\bversionCode={version}\b", installed), "Unexpected installed version"
+
+
+          def launch_and_skip():
+              assert "Status: ok" in adb("shell", "am", "start", "-W", "-n", LAUNCHER)
+              tap("offline setup", label("فتح البرنامج بدون ربط الآن"), scroll=True)
+
+
+          def assert_card(stage):
+              tap("all assignments", label("الكل"))
+              find(stage, lambda n: n.get("text") == HOMEWORK, scroll=True)
+              find("manual/unverified provenance", label("WhatsApp • معلومة غير رسمية"), scroll=True)
+              print(f"{stage}: exact synthetic homework and manual provenance visible.", flush=True)
+
+
+          assert adb("shell", "getprop", "ro.build.version.sdk") == "35"
+          adb("shell", "cmd", "connectivity", "airplane-mode", "enable")
+          adb("shell", "svc", "wifi", "disable")
+          adb("shell", "svc", "data", "disable")
+          assert adb("shell", "settings", "get", "global", "airplane_mode_on") == "1"
+          size = re.findall(r"(\d+)x(\d+)", adb("shell", "wm", "size"))
+          width, height = map(int, size[-1])
+          assert width > 0 and height > width
+          print(f"Offline API 35, display {width}x{height}", flush=True)
+
+          assert "Success" in adb("install", PREVIOUS)
+          verify_version("20261126")
+          launch_and_skip()
+          tap("manual import at home", label("إضافة واجب من واتساب", "Aufgabe aus WhatsApp hinzufügen"), scroll=True)
+          tap("homework editor", lambda n: n.get("class") == "android.widget.EditText")
+          adb("shell", "input", "text", HOMEWORK.replace(" ", "%s"))
+          find("exact editable homework", lambda n: n.get("class") == "android.widget.EditText" and n.get("text") == HOMEWORK)
+          ime = adb("shell", "dumpsys", "input_method")
+          if "mInputShown=true" in ime or "mIsInputViewShown=true" in ime:
+              adb("shell", "input", "keyevent", "KEYCODE_BACK")
+          save = label("Save homework", "Hausaufgabe speichern", "حفظ الواجب")
+          tap("request homework save", save, scroll=True)
+          find("unverified save confirmation", lambda n: any(s in n.get("text", "") for s in (
+              "unverified", "unbestätigt", "غير مؤكد"
+          )))
+          tap("confirm save on device", lambda n: n.get("resource-id") == "android:id/button1")
+          find("save success", label("Homework saved on this device as unverified.", "Hausaufgabe als unbestätigt auf diesem Gerät gespeichert.", "تم حفظ الواجب على هذا الجهاز باعتباره غير مؤكد."))
+          tap("open homework from confirmation", label("Open homework", "Hausaufgaben öffnen", "فتح الواجبات"))
+          assert_card("Prior version")
+
+          adb("shell", "am", "force-stop", PACKAGE)
+          assert "Success" in adb("install", "-r", CANDIDATE)
+          verify_version("20261127")
+          launch_and_skip()
+          tap("open homework from home", label("الواجبات", "Hausaufgaben"), scroll=True)
+          assert_card("Upgraded version")
+          adb("shell", "rm", "-f", DUMP)
+          print("STUDYHUB_OFFLINE_HOMEWORK_UI_UPGRADE_PASS: prior UI save, installed upgrade, and candidate UI readback. Not a transfer or production build.", flush=True)
+          PYTHON
+          python3 -m py_compile "$RUNNER_TEMP/studyhub-homework-ui-upgrade.py"
+
+      - name: Save and reopen synthetic homework across offline debug upgrade
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: python3 "$RUNNER_TEMP/studyhub-homework-ui-upgrade.py"
