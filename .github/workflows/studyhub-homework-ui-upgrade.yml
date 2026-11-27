@@ -160,6 +160,7 @@ jobs:
         shell: bash
         run: |
           cat > "$RUNNER_TEMP/studyhub-homework-ui-upgrade.py" <<'PYTHON'
+          import json
           import re
           import subprocess
           import time
@@ -232,6 +233,31 @@ jobs:
               adb("shell", "input", "tap", str((left + right) // 2), str((top + bottom) // 2))
 
 
+          def trace_open_failure(stage):
+              activities = adb("shell", "dumpsys", "activity", "activities")
+              activity_names = re.findall(rf"{re.escape(PACKAGE)}/(?:com\.hamza\.studyhub)?(\.[A-Za-z0-9.]+)", activities)
+              print(f"{stage}: test-app activity records: {sorted(set(activity_names))}", flush=True)
+              windows = adb("shell", "dumpsys", "window")
+              focused = next((line for line in windows.splitlines() if "mCurrentFocus=" in line), "")
+              focus_package = re.search(r"\b([A-Za-z][A-Za-z0-9_.]+)[/:]", focused)
+              print(f"{stage}: focused package: {focus_package.group(1) if focus_package else 'unknown'}", flush=True)
+              crashes = adb("logcat", "-b", "crash", "-d", "-t", "140", "-v", "raw")
+              for record in re.split(r"(?=FATAL EXCEPTION:)", crashes):
+                  if re.search(rf"^Process: {re.escape(PACKAGE)}, PID: \d+$", record, re.M):
+                      print(f"{stage}: Android crash buffer for the synthetic test app:", flush=True)
+                      for line in record.splitlines()[:45]:
+                          print(line, flush=True)
+
+
+          def assert_local_fixture(stage):
+              raw = adb("exec-out", "run-as", PACKAGE, "cat", "files/school_notifications.jsonl")
+              data = [json.loads(line) for line in raw.splitlines() if line.strip()]
+              assert len(data) == 1, f"{stage}: expected exactly one synthetic record"
+              assert data[0].get("bigText") == HOMEWORK, f"{stage}: persisted fixture differs"
+              assert data[0].get("evidenceTrust") == "COMMUNITY", f"{stage}: persisted trust differs"
+              print(f"{stage}: independently confirmed exact synthetic record in app-private storage (read-only).", flush=True)
+
+
           def verify_version(version):
               installed = adb("shell", "dumpsys", "package", PACKAGE)
               assert re.search(rf"\bversionCode={version}\b", installed), "Unexpected installed version"
@@ -280,14 +306,30 @@ jobs:
           find("save success", label("Homework saved on this device as unverified.", "Hausaufgabe als unbestätigt auf diesem Gerät gespeichert.", "تم حفظ الواجب على هذا الجهاز باعتباره غير مؤكد."))
           tap("open homework from confirmation", label("Open homework", "Hausaufgaben öffnen", "فتح الواجبات"))
           assert_card("Prior version", use_all_tab=True)
+          assert_local_fixture("Prior version")
+          featured = label("ابدأ الواجب", "Hausaufgabe beginnen", "كمّل الواجب", "Hausaufgabe fortsetzen")
+          adb("logcat", "-b", "crash", "-c")
+          adb("shell", "am", "force-stop", PACKAGE)
+          launch_and_skip()
+          tap("open prior featured assignment", featured)
+          try:
+              assert_card("Prior featured assignment")
+          except AssertionError:
+              trace_open_failure("Prior featured assignment")
 
+          adb("logcat", "-b", "crash", "-c")
           adb("shell", "am", "force-stop", PACKAGE)
           assert "Success" in adb("install", "-r", CANDIDATE)
           verify_version("20261127")
+          assert_local_fixture("Upgraded version")
           launch_and_skip()
-          tap("open featured assignment from home", label("ابدأ الواجب", "Hausaufgabe beginnen", "كمّل الواجب", "Hausaufgabe fortsetzen"))
+          tap("open featured assignment from home", featured)
           print("Candidate home featured an existing assignment.", flush=True)
-          assert_card("Upgraded version")
+          try:
+              assert_card("Upgraded version")
+          except AssertionError:
+              trace_open_failure("Candidate featured assignment")
+              raise
           adb("shell", "rm", "-f", DUMP)
           print("STUDYHUB_OFFLINE_HOMEWORK_UI_UPGRADE_PASS: prior UI save, installed upgrade, and candidate UI readback. Not a transfer or production build.", flush=True)
           PYTHON
