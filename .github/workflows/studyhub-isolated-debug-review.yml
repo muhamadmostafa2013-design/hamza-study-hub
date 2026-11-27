@@ -88,9 +88,60 @@ jobs:
           apksigner="$ANDROID_HOME/build-tools/37.0.0/apksigner"
           "$apksigner" verify --print-certs "$prev" > "$RUNNER_TEMP/studyhub-prev-signer.txt"
           "$apksigner" verify --print-certs "$next" > "$RUNNER_TEMP/studyhub-next-signer.txt"
-          grep -F 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/studyhub-prev-signer.txt" > "$RUNNER_TEMP/studyhub-prev-fingerprint.txt"
-          grep -F 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/studyhub-next-signer.txt" > "$RUNNER_TEMP/studyhub-next-fingerprint.txt"
-          cmp "$RUNNER_TEMP/studyhub-prev-fingerprint.txt" "$RUNNER_TEMP/studyhub-next-fingerprint.txt"
+          python3 - "$RUNNER_TEMP/studyhub-prev-signer.txt" "$RUNNER_TEMP/studyhub-next-signer.txt" <<'CERT_CHECK'
+          import re
+          import sys
+          from pathlib import Path
+          
+          FINGERPRINT = re.compile(
+              r"[ \t]*(?:V2 Signer: certificate|Signer #[1-9][0-9]* certificate)"
+              r" SHA-256 digest:[ \t]*([0-9a-f]{64})[ \t]*", re.IGNORECASE
+          )
+          
+          
+          def fingerprint(out, label):
+              matches = [m.group(1).lower() for line in out.splitlines()
+                         if (m := FINGERPRINT.fullmatch(line))]
+              if len(matches) != 1:
+                  raise ValueError(f"{label}: expected exactly one APK signing digest, found {len(matches)}")
+              return matches[0]
+          
+          
+          def same_signer(previous, candidate):
+              if fingerprint(previous, "prior APK") != fingerprint(candidate, "candidate APK"):
+                  raise ValueError("Verified debug APK signer fingerprints differ")
+          
+          
+          def selftest():
+              one = "a" * 64
+              old = "Signer #1 certificate SHA-256 digest: " + one
+              new = "V2 Signer: certificate SHA-256 digest: " + one.upper()
+              same_signer(old, new)
+              checks = [
+                  ("", new, "found 0"),
+                  (old + "\n" + old, new, "found 2"),
+                  (old[:-1], new, "found 0"),
+                  (old, new[:-1] + "B", "fingerprints differ"),
+              ]
+              for prev, nxt, want in checks:
+                  try:
+                      same_signer(prev, nxt)
+                  except ValueError as exc:
+                      if want not in str(exc):
+                          raise
+                  else:
+                      raise AssertionError(f"Expected parser rejection: {want}")
+              print("Signer parser fixtures passed: format variants, empty, ambiguous, malformed and unequal")
+          
+          
+          selftest()
+          if len(sys.argv) == 3:
+              try:
+                  same_signer(*(Path(file).read_text(encoding="utf-8") for file in sys.argv[1:]))
+              except (ValueError, OSError) as exc:
+                  sys.exit(str(exc))
+              print("Prior and candidate APKs share one verified debug signer.")
+          CERT_CHECK
           aapt2="$ANDROID_HOME/build-tools/37.0.0/aapt2"
           "$aapt2" dump badging "$prev" > "$RUNNER_TEMP/studyhub-prev-identity.txt"
           "$aapt2" dump badging "$next" > "$RUNNER_TEMP/studyhub-next-identity.txt"
