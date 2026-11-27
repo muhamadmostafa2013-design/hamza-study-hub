@@ -1,0 +1,71 @@
+name: Study Hub isolated debug validation
+'on':
+  push:
+    branches: ['review/studyhub-debug-validation-20261127']
+
+permissions:
+  contents: read
+
+jobs:
+  debug-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      VERSION_CODE: '20261127'
+      VERSION_NAME: '0.5.4-qa'
+    steps:
+      - name: Check out pinned privacy candidate
+        uses: actions/checkout@v5
+        with:
+          ref: 7618495fc586481dec57154898c187454acf3562
+          persist-credentials: false
+
+      - name: Verify candidate and preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "7618495fc586481dec57154898c187454acf3562"
+          printf 'Runner ImageOS=%s ImageVersion=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+          sdk="${ANDROID_SDK_ROOT:?Android SDK unavailable}"
+          test -f "$sdk/platforms/android-37.0/android.jar"
+          test -x "$sdk/build-tools/37.0.0/aapt2"
+          test -x "$sdk/build-tools/37.0.0/apksigner"
+          cat "$sdk/platforms/android-37.0/source.properties" "$sdk/build-tools/37.0.0/source.properties"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          python3 scripts/check_backup_policy.py
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+          cache-disabled: true
+
+      - name: Build debug APK and run unit tests
+        shell: bash
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug --stacktrace
+
+      - name: Verify debug APK identity and packaged backup attributes
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          tools="$ANDROID_HOME/build-tools/37.0.0"
+          sha256sum "$apk"
+          "$tools/apksigner" verify --print-certs "$apk"
+          "$tools/aapt2" dump badging "$apk" > "$RUNNER_TEMP/studyhub-badging.txt"
+          grep -F "package: name='com.hamza.studyhub.debug'" "$RUNNER_TEMP/studyhub-badging.txt"
+          "$tools/aapt2" dump xmltree --file AndroidManifest.xml "$apk" > "$RUNNER_TEMP/studyhub-manifest.txt"
+          grep -E 'allowBackup.*(false|0x0)$' "$RUNNER_TEMP/studyhub-manifest.txt"
+          grep -F 'fullBackupContent' "$RUNNER_TEMP/studyhub-manifest.txt"
+          grep -F 'dataExtractionRules' "$RUNNER_TEMP/studyhub-manifest.txt"
+          python3 -c 'from zipfile import ZipFile; z=ZipFile("app/build/outputs/apk/debug/app-debug.apk"); assert {"res/xml/backup_rules.xml","res/xml/data_extraction_rules.xml"} <= set(z.namelist())'
+
+      - name: Run Android lint
+        shell: bash
+        run: gradle --no-daemon :app:lintDebug --stacktrace
