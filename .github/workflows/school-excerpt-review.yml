@@ -1,5 +1,5 @@
 name: School excerpt review
-on:
+'on':
   push:
     branches: ['review/studyhub-school-excerpt-20261127']
 permissions:
@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -17,3 +19,37 @@ jobs:
         run: |
           javac -encoding UTF-8 -d "$RUNNER_TEMP/excerpt" app/src/main/java/com/hamza/studyhub/imports/SchoolExcerpt.java scripts/SchoolExcerptSmoke.java
           java -cp "$RUNNER_TEMP/excerpt" SchoolExcerptSmoke
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Assert preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$ANDROID_SDK_ROOT/platforms/android-37.0/android.jar"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+          cache-disabled: true
+      - name: Run Android tests and build debug app without publishing
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - name: Verify Arabic and German app-entry results
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          filename = "app/build/test-results/testDebugUnitTest/TEST-com.hamza.studyhub.SchoolExcerptPreviewTest.xml"
+          suite = ET.parse(filename).getroot()
+          assert suite.get("tests") == "2" and suite.get("failures") == "0" and suite.get("errors") == "0"
+          assert suite.get("skipped") == "0"
+          for case in suite.findall("testcase"):
+              print(case.get("name") + " passed")
+          PY
