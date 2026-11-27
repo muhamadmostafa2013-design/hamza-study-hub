@@ -1,0 +1,58 @@
+name: Study Hub disposable transfer preflight
+'on':
+  push:
+    branches: ['review/studyhub-d2d-preflight-20261127']
+permissions:
+  contents: read
+jobs:
+  d2d-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Enable KVM on disposable runner
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-studyhub.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Prepare transfer registration probe
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/studyhub-transfer-preflight.sh" <<'PROBE'
+          set -euo pipefail
+          transport='com.google.android.gms/.backup.migrate.service.D2dTransport'
+          test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = 35
+          adb shell getprop ro.build.fingerprint
+          original="$(adb shell settings get secure backup_enable_d2d_test_mode | tr -d '\r')"
+          restore_setting() {
+            if [[ "$original" == "null" ]]; then
+              adb shell settings delete secure backup_enable_d2d_test_mode > /dev/null
+            else
+              adb shell settings put secure backup_enable_d2d_test_mode "$original"
+            fi
+          }
+          trap restore_setting EXIT
+          adb shell cmd connectivity airplane-mode enable
+          adb shell svc wifi disable
+          adb shell svc data disable
+          adb shell settings put secure backup_enable_d2d_test_mode 1
+          adb shell bmgr list transports | tee "$RUNNER_TEMP/studyhub-d2d-transports.txt"
+          if grep -Fq "$transport" "$RUNNER_TEMP/studyhub-d2d-transports.txt"; then
+            echo "D2D_TRANSPORT_REGISTERED; synthetic restore control not yet run."
+          else
+            echo "D2D_TRANSPORT_UNAVAILABLE; no restore inference permitted."
+          fi
+          PROBE
+          bash -n "$RUNNER_TEMP/studyhub-transfer-preflight.sh"
+
+      - name: Inspect transfer registration on API 35 Google APIs
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash "$RUNNER_TEMP/studyhub-transfer-preflight.sh"
