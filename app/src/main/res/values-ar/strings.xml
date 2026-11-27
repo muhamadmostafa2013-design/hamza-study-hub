@@ -15,4 +15,5 @@
     <string name="image_open_failed">تعذر فتح الصورة.</string>
     <string name="qr_invalid">QR غير صالح. يجب أن يبدأ بـ untis://setschool</string>
     <string name="untis_connected_first_sync">تم ربط %1$s. جاري أول مزامنة…</string>
+    <string name="today_deadline_digest">الواجبات المفتوحة\nموعدها اليوم: %1$d\nمتأخرة: %2$d\nبلا تاريخ تسليم: %3$d</string>
 </resources>

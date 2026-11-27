@@ -1,0 +1,55 @@
+name: Study Hub family agenda review
+'on':
+  push:
+    branches: ['review/studyhub-family-deadline-digest-20261127']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studyhub-family-deadline-digest
+  cancel-in-progress: true
+
+jobs:
+  debug-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      VERSION_CODE: '20261127'
+      VERSION_NAME: '0.5.4-qa'
+    steps:
+      - name: Check out exact review revision
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify candidate and preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          printf 'Runner ImageOS=%s ImageVersion=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+          sdk="${ANDROID_SDK_ROOT:?Android SDK unavailable}"
+          test -f "$sdk/platforms/android-37.0/android.jar"
+          test -x "$sdk/build-tools/37.0.0/aapt2"
+          test -x "$sdk/build-tools/37.0.0/apksigner"
+          cat "$sdk/platforms/android-37.0/source.properties" "$sdk/build-tools/37.0.0/source.properties"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          python3 scripts/check_backup_policy.py
+
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '9.5.0'
+          cache-disabled: true
+
+      - name: Run debug build, tests and lint
+        shell: bash
+        run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace

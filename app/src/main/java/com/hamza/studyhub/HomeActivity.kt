@@ -42,6 +42,7 @@ import java.util.Locale
 class HomeActivity : AppCompatActivity() {
     private lateinit var assignmentTitle: TextView
     private lateinit var assignmentDetail: TextView
+    private lateinit var deadlineDigest: TextView
     private lateinit var primaryAction: MaterialButton
     private var nextAssignment: JSONObject? = null
     private var refreshJob: Job? = null
@@ -68,13 +69,14 @@ class HomeActivity : AppCompatActivity() {
         refreshJob = lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    HomeworkScreenPolicy.visible(
-                        SchoolFeedProjector.current(SchoolFeedStore.read(this@HomeActivity)),
-                        HomeworkScreenPolicy.Filter.TO_DO
-                    ).firstOrNull()
+                    HomeworkScreenPolicy.familyAgenda(
+                        SchoolFeedProjector.current(SchoolFeedStore.read(this@HomeActivity))
+                    )
                 }
             }
-            showAssignment(result.getOrNull(), result.isFailure)
+            val agenda = result.getOrNull()
+            showAssignment(agenda?.next, result.isFailure)
+            showDeadlineDigest(agenda)
         }
     }
 
@@ -131,6 +133,11 @@ class HomeActivity : AppCompatActivity() {
         content.addView(featured, gap(20))
         content.addView(label(getString(R.string.today_local), 13f, false, HamzaUi.muted), gap(9))
 
+        deadlineDigest = label("", 15f, false, HamzaUi.ink).apply {
+            visibility = View.GONE
+        }
+        content.addView(deadlineDigest, gap(18))
+
         section(content, R.string.today_links)
         val shortcuts = listOf(
             R.string.today_homework to MainActivity::class.java,
@@ -168,6 +175,18 @@ class HomeActivity : AppCompatActivity() {
         assignmentTitle.text = getString(R.string.today_loading)
         primaryAction.isEnabled = false
         return scroll
+    }
+
+    private fun showDeadlineDigest(agenda: HomeworkScreenPolicy.FamilyAgenda?) {
+        if (agenda == null || agenda.next == null) {
+            deadlineDigest.visibility = View.GONE
+            deadlineDigest.text = ""
+            return
+        }
+        deadlineDigest.text = getString(
+            R.string.today_deadline_digest, agenda.dueToday, agenda.overdue, agenda.undated
+        )
+        deadlineDigest.visibility = View.VISIBLE
     }
 
     private fun showAssignment(item: JSONObject?, hasError: Boolean) {
