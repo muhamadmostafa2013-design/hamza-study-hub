@@ -39,6 +39,7 @@
         <activity android:name=".StudyPlanActivity" android:exported="false" />
         <activity android:name=".SchoolBagActivity" android:exported="false" />
         <activity android:name=".SourceHubActivity" android:exported="false" />
+        <activity android:name=".imports.SchoolExcerptActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".imports.ManualHomeworkImportActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".books.BookLibraryActivity" android:exported="false" />
         <activity android:name=".learning.StudentWorkCaptureActivity" android:exported="false" />

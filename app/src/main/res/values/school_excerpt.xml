@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="school_excerpt_title">Import school assignment</string>
+    <string name="school_excerpt_help">Choose only the assignment text you are allowed to copy. Nothing is saved before confirmation. This is a local snapshot, not a school account connection.</string>
+    <string name="school_excerpt_source">Source of the selected excerpt</string>
+    <string name="school_excerpt_task">Assignment title</string>
+    <string name="school_excerpt_text">Selected assignment text (no links or addresses)</string>
+    <string name="school_excerpt_date">Due date, if confirmed (YYYY-MM-DD)</string>
+    <string name="school_excerpt_preview">Review before saving</string>
+    <string name="school_excerpt_no_date">No confirmed due date. Added to Needs review.</string>
+    <string name="school_excerpt_edit">Edit</string>
+    <string name="school_excerpt_save">Save selected assignment</string>
+    <string name="school_excerpt_title_error">Enter a title of up to 100 characters on one line.</string>
+    <string name="school_excerpt_date_error">Enter a valid date as YYYY-MM-DD, or leave it blank.</string>
+    <string name="school_excerpt_text_error">Enter up to 1,200 characters and remove links, email addresses, and mail headers.</string>
+    <string name="school_excerpt_save_error">Could not save. Your draft is still here.</string>
+</resources>

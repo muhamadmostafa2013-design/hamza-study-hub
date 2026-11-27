@@ -140,6 +140,13 @@ class SourceHubActivity : AppCompatActivity() {
             }
         )
 
+        content.addView(HamzaUi.secondaryButton(this, getString(R.string.school_excerpt_title)).apply {
+            tag = "source_school_excerpt"
+            setOnClickListener {
+                startActivity(Intent(this@SourceHubActivity, com.hamza.studyhub.imports.SchoolExcerptActivity::class.java))
+            }
+        }, HamzaUi.marginTop(this, 8))
+
         content.addView(HamzaUi.primaryButton(this, "فتح الواجبات").apply {
             tag = "source_open_feed"
             setOnClickListener { startActivity(Intent(this@SourceHubActivity, MainActivity::class.java)) }

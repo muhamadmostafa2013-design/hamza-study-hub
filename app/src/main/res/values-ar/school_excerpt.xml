@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="school_excerpt_title">استيراد واجب من المدرسة</string>
+    <string name="school_excerpt_help">انسخ نص الواجب المسموح لك بنقله فقط. لن يُحفظ شيء قبل تأكيدك. هذه نسخة محلية وليست ربطًا بحساب المدرسة.</string>
+    <string name="school_excerpt_source">مصدر النص المختار</string>
+    <string name="school_excerpt_task">عنوان الواجب</string>
+    <string name="school_excerpt_text">نص الواجب المختار (من غير روابط أو عناوين بريد)</string>
+    <string name="school_excerpt_date">موعد التسليم المؤكد إن وجد (YYYY-MM-DD)</string>
+    <string name="school_excerpt_preview">راجع قبل الحفظ</string>
+    <string name="school_excerpt_no_date">مفيش موعد تسليم مؤكد. الواجب هيظهر في قسم المراجعة.</string>
+    <string name="school_excerpt_edit">تعديل</string>
+    <string name="school_excerpt_save">احفظ الواجب المختار</string>
+    <string name="school_excerpt_title_error">اكتب عنوانًا في سطر واحد لا يتجاوز ١٠٠ حرف.</string>
+    <string name="school_excerpt_date_error">اكتب تاريخًا صحيحًا بالصيغة YYYY-MM-DD، أو سيب الحقل فاضي.</string>
+    <string name="school_excerpt_text_error">اكتب نصًا لا يتجاوز ١٢٠٠ حرف واحذف الروابط وعناوين البريد وترويسات الرسالة.</string>
+    <string name="school_excerpt_save_error">الحفظ ما تمّش، لكن المسودة لسه موجودة.</string>
+</resources>

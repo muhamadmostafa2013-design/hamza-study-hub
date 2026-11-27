@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="school_excerpt_title">Schulaufgabe übernehmen</string>
+    <string name="school_excerpt_help">Kopieren Sie nur den freigegebenen Aufgabentext. Erst nach Ihrer Bestätigung wird lokal gespeichert. Es wird kein Schulkonto verbunden.</string>
+    <string name="school_excerpt_source">Quelle des ausgewählten Texts</string>
+    <string name="school_excerpt_task">Titel der Aufgabe</string>
+    <string name="school_excerpt_text">Ausgewählter Aufgabentext (ohne Links oder Adressen)</string>
+    <string name="school_excerpt_date">Bestätigte Abgabefrist (JJJJ-MM-TT), falls bekannt</string>
+    <string name="school_excerpt_preview">Vor dem Speichern prüfen</string>
+    <string name="school_excerpt_no_date">Abgabefrist nicht bestätigt. Unter Prüfen vorgemerkt.</string>
+    <string name="school_excerpt_edit">Bearbeiten</string>
+    <string name="school_excerpt_save">Ausgewählte Aufgabe speichern</string>
+    <string name="school_excerpt_title_error">Geben Sie einen einzeiligen Titel mit höchstens 100 Zeichen ein.</string>
+    <string name="school_excerpt_date_error">Geben Sie ein gültiges Datum als JJJJ-MM-TT ein oder lassen Sie das Feld leer.</string>
+    <string name="school_excerpt_text_error">Geben Sie bis zu 1200 Zeichen ein und entfernen Sie Links, E-Mail-Adressen und Kopfzeilen.</string>
+    <string name="school_excerpt_save_error">Speichern fehlgeschlagen. Der Entwurf ist noch da.</string>
+</resources>

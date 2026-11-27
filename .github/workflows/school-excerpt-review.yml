@@ -1,0 +1,19 @@
+name: School excerpt review
+on:
+  push:
+    branches: ['review/studyhub-school-excerpt-20261127']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Validate selected school excerpt
+        run: |
+          javac -encoding UTF-8 -d "$RUNNER_TEMP/excerpt" app/src/main/java/com/hamza/studyhub/imports/SchoolExcerpt.java scripts/SchoolExcerptSmoke.java
+          java -cp "$RUNNER_TEMP/excerpt" SchoolExcerptSmoke
