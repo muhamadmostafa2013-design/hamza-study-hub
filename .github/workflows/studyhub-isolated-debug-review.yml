@@ -9,7 +9,7 @@ permissions:
 jobs:
   debug-validation:
     runs-on: ubuntu-latest
-    timeout-minutes: 22
+    timeout-minutes: 35
     env:
       VERSION_CODE: '20261127'
       VERSION_NAME: '0.5.4-qa'
@@ -69,3 +69,79 @@ jobs:
       - name: Run Android lint
         shell: bash
         run: gradle --no-daemon :app:lintDebug --stacktrace
+
+      - name: Check out prior build for same-signer update
+        uses: actions/checkout@v5
+        with:
+          ref: e27882d077e07989d8022fd72f4a0b3a3db97aa8
+          path: upgrade-base
+          persist-credentials: false
+
+      - name: Build prior debug APK and compare signers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C upgrade-base rev-parse HEAD)" = "e27882d077e07989d8022fd72f4a0b3a3db97aa8"
+          VERSION_CODE=20261126 VERSION_NAME=0.5.4-prior gradle --no-daemon -p upgrade-base :app:assembleDebug --stacktrace
+          prev=upgrade-base/app/build/outputs/apk/debug/app-debug.apk
+          next=app/build/outputs/apk/debug/app-debug.apk
+          apksigner="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          "$apksigner" verify --print-certs "$prev" > "$RUNNER_TEMP/studyhub-prev-signer.txt"
+          "$apksigner" verify --print-certs "$next" > "$RUNNER_TEMP/studyhub-next-signer.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/studyhub-prev-signer.txt" > "$RUNNER_TEMP/studyhub-prev-fingerprint.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/studyhub-next-signer.txt" > "$RUNNER_TEMP/studyhub-next-fingerprint.txt"
+          cmp "$RUNNER_TEMP/studyhub-prev-fingerprint.txt" "$RUNNER_TEMP/studyhub-next-fingerprint.txt"
+          aapt2="$ANDROID_HOME/build-tools/37.0.0/aapt2"
+          "$aapt2" dump badging "$prev" > "$RUNNER_TEMP/studyhub-prev-identity.txt"
+          "$aapt2" dump badging "$next" > "$RUNNER_TEMP/studyhub-next-identity.txt"
+          grep -F "package: name='com.hamza.studyhub.debug' versionCode='20261126'" "$RUNNER_TEMP/studyhub-prev-identity.txt"
+          grep -F "package: name='com.hamza.studyhub.debug' versionCode='20261127'" "$RUNNER_TEMP/studyhub-next-identity.txt"
+          sha256sum "$prev" "$next"
+
+      - name: Enable hardware acceleration on disposable runner
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-studyhub.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Prepare emulator assertion script
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/studyhub-emulator-upgrade.sh" <<'UPGRADE_SCRIPT'
+          set -euo pipefail
+          pkg=com.hamza.studyhub.debug
+          launcher="$pkg/com.hamza.studyhub.LaunchActivity"
+          prev=upgrade-base/app/build/outputs/apk/debug/app-debug.apk
+          next=app/build/outputs/apk/debug/app-debug.apk
+          test "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" = "35"
+          adb shell cmd connectivity airplane-mode enable
+          adb shell svc wifi disable
+          adb shell svc data disable
+          adb install "$prev"
+          adb shell am start -W -n "$launcher" > "$RUNNER_TEMP/studyhub-before-launch.txt"
+          grep -F 'Status: ok' "$RUNNER_TEMP/studyhub-before-launch.txt"
+          adb shell "run-as $pkg mkdir -p files"
+          adb shell "run-as $pkg sh -c 'echo SYNTHETIC-UPGRADE-ONLY-20261127 > files/qa-upgrade-marker.txt'"
+          test "$(adb shell run-as "$pkg" cat files/qa-upgrade-marker.txt | tr -d '\r')" = "SYNTHETIC-UPGRADE-ONLY-20261127"
+          adb shell am force-stop "$pkg"
+          adb install -r "$next"
+          adb shell am start -W -n "$launcher" > "$RUNNER_TEMP/studyhub-after-launch.txt"
+          grep -F 'Status: ok' "$RUNNER_TEMP/studyhub-after-launch.txt"
+          sleep 2
+          adb shell pidof "$pkg"
+          test "$(adb shell run-as "$pkg" cat files/qa-upgrade-marker.txt | tr -d '\r')" = "SYNTHETIC-UPGRADE-ONLY-20261127"
+          echo "API 35 debug upgrade retained one synthetic app-private file; not a homework UI or transfer test."
+          UPGRADE_SCRIPT
+          bash -n "$RUNNER_TEMP/studyhub-emulator-upgrade.sh"
+
+      - name: Verify offline startup and synthetic marker across in-place upgrade
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash "$RUNNER_TEMP/studyhub-emulator-upgrade.sh"
