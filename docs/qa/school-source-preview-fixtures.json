@@ -176,6 +176,58 @@
         "retainEntireMessage": false,
         "openNetworkLinks": false
       }
+    },
+    {
+      "id": "webuntis-timetable-snapshot",
+      "source": "SELECTED_WEBUNTIS_ICS_FILE",
+      "input": {
+        "importedAt": "2026-11-26T15:00:00Z",
+        "calendarLines": [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Study Hub QA//Synthetic schedule//EN",
+          "BEGIN:VEVENT",
+          "UID:qa-lesson-1@example.invalid",
+          "DTSTAMP:20261126T140000Z",
+          "DTSTART:20261127T080000Z",
+          "DTEND:20261127T084500Z",
+          "SUMMARY:Deutsch",
+          "STATUS:CONFIRMED",
+          "END:VEVENT",
+          "BEGIN:VEVENT",
+          "UID:qa-lesson-2@example.invalid",
+          "DTSTAMP:20261126T140000Z",
+          "DTSTART:20261127T090000Z",
+          "DTEND:20261127T094500Z",
+          "SUMMARY:Mathematik",
+          "STATUS:CANCELLED",
+          "END:VEVENT",
+          "END:VCALENDAR"
+        ],
+        "existingHomework": {
+          "title": "Deutsch",
+          "kind": "HOMEWORK",
+          "parentCompleted": true
+        }
+      },
+      "expect": {
+        "rows": [
+          {
+            "kind": "EVENT",
+            "title": "Deutsch",
+            "cancelled": false
+          },
+          {
+            "kind": "EVENT",
+            "title": "Mathematik",
+            "cancelled": true
+          }
+        ],
+        "existingHomeworkUnchanged": true,
+        "newHomeworkCount": 0,
+        "showsSnapshotImportTime": true,
+        "opensOrFetchesPrivateSubscriptionUrl": false
+      }
     }
   ]
 }
